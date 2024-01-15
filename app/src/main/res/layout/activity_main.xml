@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/swipe_container"
     android:layout_width="match_parent"
     android:layout_height="match_parent">
@@ -13,7 +14,55 @@
             android:visibility="gone"
             android:layout_width="match_parent"
             android:layout_height="match_parent" />
+        <!--
+        <RelativeLayout
+            android:id="@+id/layout_splash"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:visibility="visible"
+            android:background="@color/colorWhite">
 
+            <View
+                android:id="@+id/view_splash"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@color/colorWhite"
+                />
+
+            <ImageView
+                android:id="@+id/app_logo"
+                android:layout_width="295dp"
+                android:layout_height="383dp"
+                android:layout_alignParentTop="true"
+                android:layout_centerHorizontal="true"
+                android:layout_marginTop="139dp"
+                android:contentDescription="@string/app_name"
+                android:src="@drawable/splash_logo" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/app_name"
+                android:layout_below="@+id/app_logo"
+                android:layout_marginTop="20dp"
+                android:textSize="20dp"
+                android:textColor="#fff"
+                android:visibility="gone"
+                android:textStyle="bold"
+                android:layout_centerHorizontal="true"/>
+    
+            <LinearLayout
+                android:id="@+id/layout_footer"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_alignParentBottom="true"
+                android:layout_centerHorizontal="true"
+                android:layout_marginBottom="5dp"
+                android:orientation="horizontal">
+
+            </LinearLayout>
+        </RelativeLayout>
+        -->
         <RelativeLayout
             android:id="@+id/layout_no_internet"
             android:layout_width="match_parent"
@@ -56,7 +105,6 @@
                 android:textColor="@color/colorWhite"
                 android:layout_centerHorizontal="true"
                 android:textAlignment="center"
-                android:visibility="gone"
                 android:text="No internet found. \nCheck your connection or try again"/>
             <Button
                 android:id="@+id/btn_try_again"

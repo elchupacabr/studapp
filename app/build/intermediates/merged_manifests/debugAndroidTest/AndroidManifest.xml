@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.infixsoft.webview.test" >
+    package="com.elchupacabrsoft.stud.sssu.test" >
 
     <uses-sdk
         android:minSdkVersion="21"
@@ -10,8 +10,8 @@
         android:name="androidx.test.runner.AndroidJUnitRunner"
         android:functionalTest="false"
         android:handleProfiling="false"
-        android:label="Tests for com.infixsoft.webview"
-        android:targetPackage="com.infixsoft.webview" />
+        android:label="Tests for com.elchupacabrsoft.stud.sssu"
+        android:targetPackage="com.elchupacabrsoft.stud.sssu" />
 
     <application android:debuggable="true" >
         <uses-library android:name="android.test.runner" />

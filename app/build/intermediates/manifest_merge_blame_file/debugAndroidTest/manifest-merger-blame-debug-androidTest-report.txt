@@ -1,33 +1,33 @@
 1<?xml version="1.0" encoding="utf-8"?>
 2<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-3    package="com.infixsoft.webview.test" >
+3    package="com.elchupacabrsoft.stud.sssu.test" >
 4
 5    <uses-sdk
-5-->C:\Users\nightmafia895\AndroidStudioProjects\Android-WebView-in-Kotlin-master\app\build\intermediates\tmp\manifest\androidTest\debug\manifestMerger15030757347020418793.xml:5:5-74
+5-->C:\Users\nightmafia895\AndroidStudioProjects\Android-WebView-in-Kotlin-master-remastered\app\build\intermediates\tmp\manifest\androidTest\debug\manifestMerger12600222893861903688.xml:5:5-74
 6        android:minSdkVersion="21"
-6-->C:\Users\nightmafia895\AndroidStudioProjects\Android-WebView-in-Kotlin-master\app\build\intermediates\tmp\manifest\androidTest\debug\manifestMerger15030757347020418793.xml:5:15-41
+6-->C:\Users\nightmafia895\AndroidStudioProjects\Android-WebView-in-Kotlin-master-remastered\app\build\intermediates\tmp\manifest\androidTest\debug\manifestMerger12600222893861903688.xml:5:15-41
 7        android:targetSdkVersion="28" />
-7-->C:\Users\nightmafia895\AndroidStudioProjects\Android-WebView-in-Kotlin-master\app\build\intermediates\tmp\manifest\androidTest\debug\manifestMerger15030757347020418793.xml:5:42-71
+7-->C:\Users\nightmafia895\AndroidStudioProjects\Android-WebView-in-Kotlin-master-remastered\app\build\intermediates\tmp\manifest\androidTest\debug\manifestMerger12600222893861903688.xml:5:42-71
 8
 9    <instrumentation
-9-->C:\Users\nightmafia895\AndroidStudioProjects\Android-WebView-in-Kotlin-master\app\build\intermediates\tmp\manifest\androidTest\debug\manifestMerger15030757347020418793.xml:11:5-15:71
+9-->C:\Users\nightmafia895\AndroidStudioProjects\Android-WebView-in-Kotlin-master-remastered\app\build\intermediates\tmp\manifest\androidTest\debug\manifestMerger12600222893861903688.xml:11:5-15:79
 10        android:name="androidx.test.runner.AndroidJUnitRunner"
-10-->C:\Users\nightmafia895\AndroidStudioProjects\Android-WebView-in-Kotlin-master\app\build\intermediates\tmp\manifest\androidTest\debug\manifestMerger15030757347020418793.xml:11:22-76
+10-->C:\Users\nightmafia895\AndroidStudioProjects\Android-WebView-in-Kotlin-master-remastered\app\build\intermediates\tmp\manifest\androidTest\debug\manifestMerger12600222893861903688.xml:11:22-76
 11        android:functionalTest="false"
-11-->C:\Users\nightmafia895\AndroidStudioProjects\Android-WebView-in-Kotlin-master\app\build\intermediates\tmp\manifest\androidTest\debug\manifestMerger15030757347020418793.xml:14:22-52
+11-->C:\Users\nightmafia895\AndroidStudioProjects\Android-WebView-in-Kotlin-master-remastered\app\build\intermediates\tmp\manifest\androidTest\debug\manifestMerger12600222893861903688.xml:14:22-52
 12        android:handleProfiling="false"
-12-->C:\Users\nightmafia895\AndroidStudioProjects\Android-WebView-in-Kotlin-master\app\build\intermediates\tmp\manifest\androidTest\debug\manifestMerger15030757347020418793.xml:13:22-53
-13        android:label="Tests for com.infixsoft.webview"
-13-->C:\Users\nightmafia895\AndroidStudioProjects\Android-WebView-in-Kotlin-master\app\build\intermediates\tmp\manifest\androidTest\debug\manifestMerger15030757347020418793.xml:15:22-69
-14        android:targetPackage="com.infixsoft.webview" />
-14-->C:\Users\nightmafia895\AndroidStudioProjects\Android-WebView-in-Kotlin-master\app\build\intermediates\tmp\manifest\androidTest\debug\manifestMerger15030757347020418793.xml:12:22-67
+12-->C:\Users\nightmafia895\AndroidStudioProjects\Android-WebView-in-Kotlin-master-remastered\app\build\intermediates\tmp\manifest\androidTest\debug\manifestMerger12600222893861903688.xml:13:22-53
+13        android:label="Tests for com.elchupacabrsoft.stud.sssu"
+13-->C:\Users\nightmafia895\AndroidStudioProjects\Android-WebView-in-Kotlin-master-remastered\app\build\intermediates\tmp\manifest\androidTest\debug\manifestMerger12600222893861903688.xml:15:22-77
+14        android:targetPackage="com.elchupacabrsoft.stud.sssu" />
+14-->C:\Users\nightmafia895\AndroidStudioProjects\Android-WebView-in-Kotlin-master-remastered\app\build\intermediates\tmp\manifest\androidTest\debug\manifestMerger12600222893861903688.xml:12:22-75
 15
 16    <application android:debuggable="true" >
-16-->C:\Users\nightmafia895\AndroidStudioProjects\Android-WebView-in-Kotlin-master\app\build\intermediates\tmp\manifest\androidTest\debug\manifestMerger15030757347020418793.xml:7:5-9:19
-16-->C:\Users\nightmafia895\AndroidStudioProjects\Android-WebView-in-Kotlin-master\app\build\intermediates\tmp\manifest\androidTest\debug\manifestMerger15030757347020418793.xml:7:18-43
+16-->C:\Users\nightmafia895\AndroidStudioProjects\Android-WebView-in-Kotlin-master-remastered\app\build\intermediates\tmp\manifest\androidTest\debug\manifestMerger12600222893861903688.xml:7:5-9:19
+16-->C:\Users\nightmafia895\AndroidStudioProjects\Android-WebView-in-Kotlin-master-remastered\app\build\intermediates\tmp\manifest\androidTest\debug\manifestMerger12600222893861903688.xml:7:18-43
 17        <uses-library android:name="android.test.runner" />
-17-->C:\Users\nightmafia895\AndroidStudioProjects\Android-WebView-in-Kotlin-master\app\build\intermediates\tmp\manifest\androidTest\debug\manifestMerger15030757347020418793.xml:8:9-60
-17-->C:\Users\nightmafia895\AndroidStudioProjects\Android-WebView-in-Kotlin-master\app\build\intermediates\tmp\manifest\androidTest\debug\manifestMerger15030757347020418793.xml:8:23-57
+17-->C:\Users\nightmafia895\AndroidStudioProjects\Android-WebView-in-Kotlin-master-remastered\app\build\intermediates\tmp\manifest\androidTest\debug\manifestMerger12600222893861903688.xml:8:9-60
+17-->C:\Users\nightmafia895\AndroidStudioProjects\Android-WebView-in-Kotlin-master-remastered\app\build\intermediates\tmp\manifest\androidTest\debug\manifestMerger12600222893861903688.xml:8:23-57
 18    </application>
 19
 20</manifest>

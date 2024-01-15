@@ -1,10 +1,7 @@
-#Fri Jan 12 10:58:26 MSK 2024
-base.2=C\:\\Users\\nightmafia895\\AndroidStudioProjects\\Android-WebView-in-Kotlin-master\\app\\build\\intermediates\\dex\\debugAndroidTest\\mergeProjectDexDebugAndroidTest\\6\\classes.dex
-path.2=6/classes.dex
-base.1=C\:\\Users\\nightmafia895\\AndroidStudioProjects\\Android-WebView-in-Kotlin-master\\app\\build\\intermediates\\dex\\debugAndroidTest\\mergeProjectDexDebugAndroidTest\\0\\classes.dex
-path.1=0/classes.dex
-base.0=C\:\\Users\\nightmafia895\\AndroidStudioProjects\\Android-WebView-in-Kotlin-master\\app\\build\\intermediates\\dex\\debugAndroidTest\\mergeExtDexDebugAndroidTest\\classes.dex
-renamed.2=classes3.dex
+#Mon Jan 15 22:44:16 MSK 2024
+base.1=C\:\\Users\\nightmafia895\\AndroidStudioProjects\\Android-WebView-in-Kotlin-master-remastered\\app\\build\\intermediates\\dex\\debugAndroidTest\\mergeProjectDexDebugAndroidTest\\out\\classes.dex
+path.1=classes.dex
+base.0=C\:\\Users\\nightmafia895\\AndroidStudioProjects\\Android-WebView-in-Kotlin-master-remastered\\app\\build\\intermediates\\dex\\debugAndroidTest\\mergeExtDexDebugAndroidTest\\out\\classes.dex
 renamed.1=classes2.dex
 renamed.0=classes.dex
 path.0=classes.dex

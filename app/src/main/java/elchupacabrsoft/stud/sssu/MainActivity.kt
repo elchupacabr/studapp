@@ -1,9 +1,8 @@
 package elchupacabrsoft.stud.sssu;
 
-//import androidx.appcompat.app.AppCompatDelegate
-
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.app.DownloadManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
@@ -19,13 +18,14 @@ import android.util.Log
 import android.view.KeyEvent
 import android.view.View
 import android.webkit.*
-import android.webkit.URLUtil.*
 import android.webkit.WebSettings.RenderPriority
 import android.widget.Button
 import android.widget.ProgressBar
 import android.widget.RelativeLayout
 import android.widget.Toast
 import androidx.annotation.RequiresApi
+import androidx.appcompat.app.AppCompatDelegate
+import elchupacabrsoft.stud.sssu.R.*
 import java.io.File
 import java.io.IOException
 import java.security.NoSuchAlgorithmException
@@ -38,7 +38,6 @@ import javax.crypto.spec.SecretKeySpec
 
 
 class MainActivity : Activity() {
-
     private lateinit var mContext: Context
     internal var mLoaded = false
 
@@ -55,7 +54,7 @@ class MainActivity : Activity() {
     private lateinit var btnTryAgain: Button
     private lateinit var mWebView: WebView
     private lateinit var prgs: ProgressBar
-    private var viewSplash: View? = null
+    //private var viewSplash: View? = null
     //private lateinit var layoutSplash: RelativeLayout
     private lateinit var layoutWebview: RelativeLayout
     private lateinit var layoutNoInternet: RelativeLayout
@@ -64,19 +63,19 @@ class MainActivity : Activity() {
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
+        setContentView(layout.activity_main)
 
-        //AppCompatDelegate.setCompatVectorFromResourcesEnabled(true)
+        AppCompatDelegate.setCompatVectorFromResourcesEnabled(true)
 
         mContext = this
-        mWebView = findViewById<View>(R.id.webview) as WebView
-        prgs = findViewById<View>(R.id.progressBar) as ProgressBar
-        btnTryAgain = findViewById<View>(R.id.btn_try_again) as Button
-        //viewSplash = findViewById(R.id.view_splash) as View
-        layoutWebview = findViewById<View>(R.id.layout_webview) as RelativeLayout
-        layoutNoInternet = findViewById<View>(R.id.layout_no_internet) as RelativeLayout
+        mWebView = findViewById<View>(id.webview) as WebView
+        prgs = findViewById<View>(id.progressBar) as ProgressBar
+        btnTryAgain = findViewById<View>(id.btn_try_again) as Button
+        //viewSplash = findViewById(id.view_splash) as View
+        layoutWebview = findViewById<View>(id.layout_webview) as RelativeLayout
+        layoutNoInternet = findViewById<View>(id.layout_no_internet) as RelativeLayout
         /** Layout of Splash screen View  */
-        //layoutSplash = findViewById<View>(R.id.layout_splash) as RelativeLayout
+        //layoutSplash = findViewById<View>(id.layout_splash) as RelativeLayout
 
 
         //request for show website
@@ -117,7 +116,7 @@ class MainActivity : Activity() {
                 prgs.visibility = View.VISIBLE
                 //viewSplash.getBackground().setAlpha(145);
                 mWebView.visibility = View.VISIBLE
-            }, 20)
+            }, 200)
 
         } else {
             mWebView.visibility = View.VISIBLE
@@ -163,7 +162,7 @@ class MainActivity : Activity() {
         mWebView.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView, url: String?): Boolean {
 
-                Log.d(TAG , "URL: " + url!!)
+                Log.d(TAG, "URL: " + url!!)
                 if (internetCheck(mContext)) {
                     // If you wnat to open url inside then use
                     view.loadUrl(url);
@@ -224,7 +223,7 @@ class MainActivity : Activity() {
                 Handler().postDelayed({
                     //layoutSplash.visibility = View.GONE
                     //viewSplash.getBackground().setAlpha(255);
-                }, 20)
+                }, 200)
             }
         }
 
@@ -232,7 +231,7 @@ class MainActivity : Activity() {
         mWebView.webChromeClient = object : WebChromeClient() {
             override fun onShowFileChooser(
                     webView: WebView, filePathCallback: ValueCallback<Array<Uri>>,
-                    fileChooserParams: WebChromeClient.FileChooserParams): Boolean {
+                    fileChooserParams: FileChooserParams): Boolean {
                 if (mFilePathCallback != null) {
                     mFilePathCallback!!.onReceiveValue(null)
                 }
@@ -247,7 +246,7 @@ class MainActivity : Activity() {
                         takePictureIntent.putExtra("PhotoPath", mCameraPhotoPath)
                     } catch (ex: IOException) {
                         // Error occurred while creating the File
-                        Log.e(TAG , "Unable to create Image File", ex)
+                        Log.e(TAG, "Unable to create Image File", ex)
                     }
 
                     // Continue only if the File was successfully created
@@ -280,20 +279,18 @@ class MainActivity : Activity() {
 
                 return true
             }
-
         }
 
+        //handle downloading
+
+        //handle downloading
         mWebView.setDownloadListener { url , userAgent , contentDisposition , mimetype , contentLength ->
             val i = Intent(Intent.ACTION_VIEW)
             i.data = Uri.parse(url)
             startActivity(i)
         }
 
-
     }
-
-
-
 
     @Throws(IOException::class)
     private fun createImageFile(): File {
@@ -352,7 +349,7 @@ class MainActivity : Activity() {
         var results: Array<Uri>? = null
 
         // Check that the response is a good one
-        if (resultCode == Activity.RESULT_OK) {
+        if (resultCode == RESULT_OK) {
             if (data == null) {
                 // If there is not data, then we may have taken a photo
                 if (mCameraPhotoPath != null) {
@@ -399,7 +396,7 @@ class MainActivity : Activity() {
         this.doubleBackToExitPressedOnce = true
         Toast.makeText(this, "Please click BACK again to exit", Toast.LENGTH_SHORT).show()
 
-        Handler().postDelayed({ doubleBackToExitPressedOnce = false }, 200)
+        Handler().postDelayed({ doubleBackToExitPressedOnce = false }, 500)
         return true
     }
 
@@ -482,7 +479,7 @@ class MainActivity : Activity() {
 
         fun internetCheck(context: Context): Boolean {
             var available = false
-            val connectivity = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+            val connectivity = context.getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager
 
             if (connectivity != null) {
                 val networkInfo = connectivity.allNetworkInfo

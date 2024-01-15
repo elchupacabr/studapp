@@ -80,7 +80,7 @@
                                               <map>
                                                 <entry key="color" value="000000" />
                                                 <entry key="imagePath" value="C:\Users\nightmafia895\Downloads\5af887745029f06553c599fb4556eab2.webp" />
-                                                <entry key="scalingPercent" value="62" />
+                                                <entry key="scalingPercent" value="65" />
                                               </map>
                                             </option>
                                           </PersistentState>
@@ -113,7 +113,7 @@
                                   <option name="values">
                                     <map>
                                       <entry key="backgroundAssetType" value="COLOR" />
-                                      <entry key="backgroundColor" value="ffffff" />
+                                      <entry key="backgroundColor" value="fdfdfd" />
                                     </map>
                                   </option>
                                 </PersistentState>
