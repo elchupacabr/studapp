@@ -4,16 +4,28 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/swipe_container"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    >
+
     <RelativeLayout
         android:id="@+id/layout_webview"
         android:layout_width="match_parent"
         android:layout_height="match_parent">
-        <WebView
-            android:id="@+id/webview"
-            android:visibility="gone"
+        <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+            android:id="@+id/swipe_containers"
             android:layout_width="match_parent"
-            android:layout_height="match_parent" />
+            android:layout_height="match_parent"
+
+            >
+
+            <WebView
+                android:id="@+id/webview"
+                android:visibility="gone"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+
+        </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+
         <!--
         <RelativeLayout
             android:id="@+id/layout_splash"
@@ -50,7 +62,7 @@
                 android:visibility="gone"
                 android:textStyle="bold"
                 android:layout_centerHorizontal="true"/>
-    
+
             <LinearLayout
                 android:id="@+id/layout_footer"
                 android:layout_width="wrap_content"
@@ -127,6 +139,7 @@
             android:progressDrawable="@drawable/cs_custom_progressbar"
             style="@style/Base.Widget.AppCompat.ProgressBar.Horizontal" />
     </RelativeLayout>
+
     <!--LinearLayout
         android:id="@+id/layout_footer"
         android:layout_width="match_parent"

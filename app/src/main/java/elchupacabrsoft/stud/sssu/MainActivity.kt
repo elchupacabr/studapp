@@ -1,8 +1,7 @@
-package elchupacabrsoft.stud.sssu;
+package elchupacabrsoft.stud.sssu
 
 import android.annotation.SuppressLint
 import android.app.Activity
-import android.app.DownloadManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
@@ -25,6 +24,8 @@ import android.widget.RelativeLayout
 import android.widget.Toast
 import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AppCompatDelegate
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+//import com.google.firebase.crashlytics.buildtools.reloc.org.apache.commons.io.FilenameUtils.*
 import elchupacabrsoft.stud.sssu.R.*
 import java.io.File
 import java.io.IOException
@@ -48,32 +49,39 @@ class MainActivity : Activity() {
     private var mCameraPhotoPath: String? = null
     private var mFilePathCallback: ValueCallback<Array<Uri>>? = null
     internal var doubleBackToExitPressedOnce = false
-
+    internal var path_web = "/storage/emulated/0/Download"
 
     //AdView adView;
     private lateinit var btnTryAgain: Button
     private lateinit var mWebView: WebView
+    private lateinit var SwipeRefreshLayout: SwipeRefreshLayout
     private lateinit var prgs: ProgressBar
+
     //private var viewSplash: View? = null
     //private lateinit var layoutSplash: RelativeLayout
     private lateinit var layoutWebview: RelativeLayout
-    private lateinit var layoutNoInternet: RelativeLayout
+    //private lateinit var layoutNoInternet: RelativeLayout
 
 
-    @SuppressLint("SetJavaScriptEnabled")
+    @SuppressLint("SetJavaScriptEnabled" ,"MissingInflatedId")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(layout.activity_main)
+        SwipeRefreshLayout = findViewById<SwipeRefreshLayout>(id.swipe_containers)
 
+        SwipeRefreshLayout.setOnRefreshListener {
+            mWebView.reload()
+        }
         AppCompatDelegate.setCompatVectorFromResourcesEnabled(true)
 
         mContext = this
         mWebView = findViewById<View>(id.webview) as WebView
+
         prgs = findViewById<View>(id.progressBar) as ProgressBar
         btnTryAgain = findViewById<View>(id.btn_try_again) as Button
         //viewSplash = findViewById(id.view_splash) as View
         layoutWebview = findViewById<View>(id.layout_webview) as RelativeLayout
-        layoutNoInternet = findViewById<View>(id.layout_no_internet) as RelativeLayout
+        //layoutNoInternet = findViewById<View>(id.layout_no_internet) as RelativeLayout
         /** Layout of Splash screen View  */
         //layoutSplash = findViewById<View>(id.layout_splash) as RelativeLayout
 
@@ -84,8 +92,9 @@ class MainActivity : Activity() {
         btnTryAgain.setOnClickListener {
             mWebView.visibility = View.GONE
             prgs.visibility = View.VISIBLE
+            SwipeRefreshLayout.isRefreshing = true
             //layoutSplash.visibility = View.VISIBLE
-            layoutNoInternet.visibility = View.GONE
+            //layoutNoInternet.visibility = View.GONE
             requestForWebview()
         }
 
@@ -110,19 +119,21 @@ class MainActivity : Activity() {
 
     private fun requestForWebview() {
 
-        if (!mLoaded) {
+        if (! mLoaded) {
             requestWebView()
             Handler().postDelayed({
+                SwipeRefreshLayout.isRefreshing = true
                 prgs.visibility = View.VISIBLE
                 //viewSplash.getBackground().setAlpha(145);
                 mWebView.visibility = View.VISIBLE
-            }, 200)
+            } ,200)
 
         } else {
             mWebView.visibility = View.VISIBLE
             prgs.visibility = View.GONE
+            SwipeRefreshLayout.isRefreshing = false
             //layoutSplash.visibility = View.GONE
-            layoutNoInternet.visibility = View.GONE
+            //layoutNoInternet.visibility = View.GONE
         }
 
     }
@@ -133,15 +144,21 @@ class MainActivity : Activity() {
         /** Layout of webview screen View  */
         if (internetCheck(mContext)) {
             mWebView.visibility = View.VISIBLE
-            layoutNoInternet.visibility = View.GONE
+            //layoutNoInternet.visibility = View.GONE
             mWebView.loadUrl(URL)
-        } else {
-            prgs.visibility = View.GONE
-            mWebView.visibility = View.GONE
-            //layoutSplash.visibility = View.GONE
-            layoutNoInternet.visibility = View.VISIBLE
 
-            return
+            mWebView.saveWebArchive(path_web + File.separator + mWebView.title + ".mhtml")
+            SwipeRefreshLayout.isRefreshing = true
+        } else {
+            //prgs.visibility = View.GONE
+            //mWebView.visibility = View.GONE
+            //layoutSplash.visibility = View.GONE
+            //layoutNoInternet.visibility = View.VISIBLE
+
+            //mWebView.loadUrl(URL)
+            mWebView.loadUrl("file://" + path_web + File.separator + mWebView.title + ".mhtml")
+
+            //return
         }
         mWebView.isFocusable = true
         mWebView.isFocusableInTouchMode = true
@@ -150,19 +167,20 @@ class MainActivity : Activity() {
         mWebView.settings.setRenderPriority(RenderPriority.HIGH)
         mWebView.settings.cacheMode = WebSettings.LOAD_DEFAULT
         mWebView.settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-
+        mWebView.settings.cacheMode(WebSettings.LOAD_CACHE_ELSE_NETWORK)
         mWebView.settings.domStorageEnabled = true
         mWebView.settings.setAppCacheEnabled(true)
         mWebView.settings.databaseEnabled = true
+        SwipeRefreshLayout.isRefreshing = true
         //mWebView.getSettings().setDatabasePath(
         //        this.getFilesDir().getPath() + this.getPackageName() + "/databases/");
 
         // this force use chromeWebClient
         mWebView.settings.setSupportMultipleWindows(false)
         mWebView.webViewClient = object : WebViewClient() {
-            override fun shouldOverrideUrlLoading(view: WebView, url: String?): Boolean {
+            override fun shouldOverrideUrlLoading(view: WebView ,url: String?): Boolean {
 
-                Log.d(TAG, "URL: " + url!!)
+                Log.d(TAG ,"URL: " + url !!)
                 if (internetCheck(mContext)) {
                     // If you wnat to open url inside then use
                     view.loadUrl(url);
@@ -181,7 +199,7 @@ class MainActivity : Activity() {
                     prgs.visibility = View.GONE
                     mWebView.visibility = View.GONE
                     //layoutSplash.visibility = View.GONE
-                    layoutNoInternet.visibility = View.VISIBLE
+                    //layoutNoInternet.visibility = View.VISIBLE
                 }
 
                 return true
@@ -202,20 +220,27 @@ class MainActivity : Activity() {
                 return false;
             }*/
 
-            override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
-                super.onPageStarted(view, url, favicon)
+            override fun onPageStarted(view: WebView ,url: String ,favicon: Bitmap?) {
+                super.onPageStarted(view ,url ,favicon)
+                SwipeRefreshLayout.isRefreshing = true
                 if (prgs.visibility == View.GONE) {
                     prgs.visibility = View.VISIBLE
                 }
             }
 
-            override fun onLoadResource(view: WebView, url: String) {
-                super.onLoadResource(view, url)
+            override fun onLoadResource(view: WebView ,url: String) {
+                super.onLoadResource(view ,url)
             }
 
-            override fun onPageFinished(view: WebView, url: String) {
-                super.onPageFinished(view, url)
+            override fun onPageFinished(view: WebView ,url: String) {
+                super.onPageFinished(view ,url)
+                //mWebView.clearCache(true)
                 mLoaded = true
+                SwipeRefreshLayout.isRefreshing = false
+
+
+                //mWebView.loadUrl("file://" + file.absolutePath + ".mht")
+                mWebView.saveWebArchive(path_web + File.separator + mWebView.title + ".mhtml")
                 if (prgs.visibility == View.VISIBLE)
                     prgs.visibility = View.GONE
 
@@ -223,37 +248,40 @@ class MainActivity : Activity() {
                 Handler().postDelayed({
                     //layoutSplash.visibility = View.GONE
                     //viewSplash.getBackground().setAlpha(255);
-                }, 200)
+                } ,200)
             }
         }
 
         //file attach request
         mWebView.webChromeClient = object : WebChromeClient() {
             override fun onShowFileChooser(
-                    webView: WebView, filePathCallback: ValueCallback<Array<Uri>>,
-                    fileChooserParams: FileChooserParams): Boolean {
+                webView: WebView ,filePathCallback: ValueCallback<Array<Uri>> ,
+                fileChooserParams: FileChooserParams
+            ): Boolean {
                 if (mFilePathCallback != null) {
-                    mFilePathCallback!!.onReceiveValue(null)
+                    mFilePathCallback !!.onReceiveValue(null)
                 }
                 mFilePathCallback = filePathCallback
 
                 var takePictureIntent: Intent? = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
-                if (takePictureIntent!!.resolveActivity(this@MainActivity.packageManager) != null) {
+                if (takePictureIntent !!.resolveActivity(this@MainActivity.packageManager) != null) {
                     // Create the File where the photo should go
                     var photoFile: File? = null
                     try {
                         photoFile = createImageFile()
-                        takePictureIntent.putExtra("PhotoPath", mCameraPhotoPath)
+                        takePictureIntent.putExtra("PhotoPath" ,mCameraPhotoPath)
                     } catch (ex: IOException) {
                         // Error occurred while creating the File
-                        Log.e(TAG, "Unable to create Image File", ex)
+                        Log.e(TAG ,"Unable to create Image File" ,ex)
                     }
 
                     // Continue only if the File was successfully created
                     if (photoFile != null) {
                         mCameraPhotoPath = "file:" + photoFile.absolutePath
-                        takePictureIntent.putExtra(MediaStore.EXTRA_OUTPUT,
-                                Uri.fromFile(photoFile))
+                        takePictureIntent.putExtra(
+                            MediaStore.EXTRA_OUTPUT ,
+                            Uri.fromFile(photoFile)
+                        )
                     } else {
                         takePictureIntent = null
                     }
@@ -271,11 +299,11 @@ class MainActivity : Activity() {
                 }
 
                 val chooserIntent = Intent(Intent.ACTION_CHOOSER)
-                chooserIntent.putExtra(Intent.EXTRA_INTENT, contentSelectionIntent)
-                chooserIntent.putExtra(Intent.EXTRA_TITLE, "Image Chooser")
-                chooserIntent.putExtra(Intent.EXTRA_INITIAL_INTENTS, intentArray)
+                chooserIntent.putExtra(Intent.EXTRA_INTENT ,contentSelectionIntent)
+                chooserIntent.putExtra(Intent.EXTRA_TITLE ,"Image Chooser")
+                chooserIntent.putExtra(Intent.EXTRA_INITIAL_INTENTS ,intentArray)
 
-                startActivityForResult(chooserIntent, INPUT_FILE_REQUEST_CODE)
+                startActivityForResult(chooserIntent ,INPUT_FILE_REQUEST_CODE)
 
                 return true
             }
@@ -284,12 +312,14 @@ class MainActivity : Activity() {
         //handle downloading
 
         //handle downloading
-        mWebView.setDownloadListener { url , userAgent , contentDisposition , mimetype , contentLength ->
+        mWebView.setDownloadListener { url ,userAgent ,contentDisposition ,mimetype ,contentLength ->
             val i = Intent(Intent.ACTION_VIEW)
             i.data = Uri.parse(url)
             startActivity(i)
-        }
 
+        }
+        //val a = Intent(this, MainActivity::class.java)
+        //startActivity(a)
     }
 
     @Throws(IOException::class)
@@ -298,11 +328,12 @@ class MainActivity : Activity() {
         val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss").format(Date())
         val imageFileName = "JPEG_" + timeStamp + "_"
         val storageDir = Environment.getExternalStoragePublicDirectory(
-                Environment.DIRECTORY_PICTURES)
+            Environment.DIRECTORY_PICTURES
+        )
         return File.createTempFile(
-                imageFileName, /* prefix */
-                ".jpg", /* suffix */
-                storageDir      /* directory */
+            imageFileName , /* prefix */
+            ".jpg" , /* suffix */
+            storageDir      /* directory */
         )
     }
 
@@ -340,9 +371,9 @@ class MainActivity : Activity() {
         mWebView.setWebViewClient(new WebViewClient());
     }*/
 
-    public override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+    public override fun onActivityResult(requestCode: Int ,resultCode: Int ,data: Intent?) {
         if (requestCode != INPUT_FILE_REQUEST_CODE || mFilePathCallback == null) {
-            super.onActivityResult(requestCode, resultCode, data)
+            super.onActivityResult(requestCode ,resultCode ,data)
             return
         }
 
@@ -363,10 +394,11 @@ class MainActivity : Activity() {
             }
         }
 
-        mFilePathCallback!!.onReceiveValue(results)
+        mFilePathCallback !!.onReceiveValue(results)
         mFilePathCallback = null
         return
     }
+
 
     private fun showAdMob() {
         /** Layout of AdMob screen View  */
@@ -383,20 +415,20 @@ class MainActivity : Activity() {
        }*/
     }
 
-    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+    override fun onKeyDown(keyCode: Int ,event: KeyEvent): Boolean {
         if (keyCode == KeyEvent.KEYCODE_BACK && mWebView.canGoBack()) {
             mWebView.goBack()
             return true
         }
 
         if (doubleBackToExitPressedOnce) {
-            return super.onKeyDown(keyCode, event)
+            return super.onKeyDown(keyCode ,event)
         }
 
         this.doubleBackToExitPressedOnce = true
-        Toast.makeText(this, "Please click BACK again to exit", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this ,"Please click BACK again to exit" ,Toast.LENGTH_SHORT).show()
 
-        Handler().postDelayed({ doubleBackToExitPressedOnce = false }, 500)
+        Handler().postDelayed({ doubleBackToExitPressedOnce = false } ,500)
         return true
     }
 
@@ -407,12 +439,12 @@ class MainActivity : Activity() {
 
 
         //for security
-        @Throws(NoSuchAlgorithmException::class, InvalidKeySpecException::class)
+        @Throws(NoSuchAlgorithmException::class ,InvalidKeySpecException::class)
         fun generateKey(): SecretKey {
             val random = SecureRandom()
-            val key = byteArrayOf(1, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 1, 0, 0, 0, 0)
+            val key = byteArrayOf(1 ,0 ,0 ,0 ,0 ,0 ,0 ,1 ,1 ,1 ,0 ,1 ,0 ,0 ,0 ,0)
             //random.nextBytes(key);
-            return SecretKeySpec(key, "AES")
+            return SecretKeySpec(key ,"AES")
         }
 
         /*@Throws(NoSuchAlgorithmException::class, NoSuchPaddingException::class, InvalidKeyException::class, InvalidParameterSpecException::class, IllegalBlockSizeException::class, BadPaddingException::class, UnsupportedEncodingException::class)
@@ -495,5 +527,9 @@ class MainActivity : Activity() {
             return available
         }
     }
+
+}
+
+private operator fun Int.invoke(loadCacheElseNetwork: Int) {
 
 }
