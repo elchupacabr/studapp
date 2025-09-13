@@ -1,1 +1,1 @@
-![ссылка](https://github.com/elchupacabr/studapp/raw/refs/heads/main/gbplt.mp4)
+![link](https://elchupacabr.github.io/zerotrust/gbpltw.mp4)
