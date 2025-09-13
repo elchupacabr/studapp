@@ -1,1 +1,1 @@
-![](gbpltw.mp4)
+![](/gbpltw.mp4)
