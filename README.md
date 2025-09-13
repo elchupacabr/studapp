@@ -1,1 +1,1 @@
-![link](https://elchupacabr.github.io/zerotrust/gbpltw.mp4)
+![](https://elchupacabr.github.io/zerotrust/gbpltw.mp4)
