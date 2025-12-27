@@ -2,9 +2,8 @@ package elchupacabrsoft.stud.sssu
 
 import android.annotation.SuppressLint
 import android.app.Activity
-import android.content.Context
-import android.content.Intent
-import android.graphics.Bitmap
+import android.app.DownloadManager
+import android.content.*
 import android.net.ConnectivityManager
 import android.net.NetworkInfo
 import android.net.Uri
@@ -12,12 +11,9 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.os.Handler
-import android.provider.MediaStore
-import android.util.Log
 import android.view.KeyEvent
 import android.view.View
 import android.webkit.*
-import android.webkit.WebSettings.RenderPriority
 import android.widget.Button
 import android.widget.ProgressBar
 import android.widget.RelativeLayout
@@ -25,511 +21,273 @@ import android.widget.Toast
 import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
-//import com.google.firebase.crashlytics.buildtools.reloc.org.apache.commons.io.FilenameUtils.*
 import elchupacabrsoft.stud.sssu.R.*
-import java.io.File
-import java.io.IOException
-import java.security.NoSuchAlgorithmException
-import java.security.SecureRandom
-import java.security.spec.InvalidKeySpecException
-import java.text.SimpleDateFormat
+import java.io.BufferedReader
+import java.io.InputStreamReader
+import java.net.HttpURLConnection
+import java.net.URL
+import java.net.URLDecoder
 import java.util.*
-import javax.crypto.*
-import javax.crypto.spec.SecretKeySpec
-
 
 class MainActivity : Activity() {
+
     private lateinit var mContext: Context
-    internal var mLoaded = false
+    private var mLoaded = false
+    private var defaultURL = "https://stud.sssu.ru/WebApp/#/Rasp/Group/26576"
+    private var currentURL: String? = null
+    private var doubleBackToExitPressedOnce = false
 
-    // set your custom url here
-    internal var URL = "https://stud.sssu.ru/WebApp/#/Rasp/"
-
-    //for attach files
-    private var mCameraPhotoPath: String? = null
-    private var mFilePathCallback: ValueCallback<Array<Uri>>? = null
-    internal var doubleBackToExitPressedOnce = false
-    internal var path_web = "/storage/emulated/0/Download"
-
-    //AdView adView;
     private lateinit var btnTryAgain: Button
     private lateinit var mWebView: WebView
-    private lateinit var SwipeRefreshLayout: SwipeRefreshLayout
+    private lateinit var swipeRefreshLayout: SwipeRefreshLayout
     private lateinit var prgs: ProgressBar
-
-    //private var viewSplash: View? = null
-    //private lateinit var layoutSplash: RelativeLayout
     private lateinit var layoutWebview: RelativeLayout
-    //private lateinit var layoutNoInternet: RelativeLayout
 
+    private val prefsName = "webview_prefs"
+    private val lastUrlKey = "last_url"
 
-    @SuppressLint("SetJavaScriptEnabled" ,"MissingInflatedId")
+    @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(layout.activity_main)
-        SwipeRefreshLayout = findViewById<SwipeRefreshLayout>(id.swipe_containers)
-
-        SwipeRefreshLayout.setOnRefreshListener {
-            mWebView.reload()
-        }
-        AppCompatDelegate.setCompatVectorFromResourcesEnabled(true)
 
         mContext = this
-        mWebView = findViewById<View>(id.webview) as WebView
+        swipeRefreshLayout = findViewById(id.swipe_containers)
+        swipeRefreshLayout.setOnRefreshListener { mWebView.reload() }
 
+        AppCompatDelegate.setCompatVectorFromResourcesEnabled(true)
+
+        mWebView = findViewById<View>(id.webview) as WebView
         prgs = findViewById<View>(id.progressBar) as ProgressBar
         btnTryAgain = findViewById<View>(id.btn_try_again) as Button
-        //viewSplash = findViewById(id.view_splash) as View
         layoutWebview = findViewById<View>(id.layout_webview) as RelativeLayout
-        //layoutNoInternet = findViewById<View>(id.layout_no_internet) as RelativeLayout
-        /** Layout of Splash screen View  */
-        //layoutSplash = findViewById<View>(id.layout_splash) as RelativeLayout
 
+        CookieManager.getInstance().setAcceptCookie(true)
+        CookieManager.getInstance().setAcceptThirdPartyCookies(mWebView, true)
 
-        //request for show website
+        // ???????? ????????? URL
+        val prefs = getSharedPreferences(prefsName, Context.MODE_PRIVATE)
+        currentURL = prefs.getString(lastUrlKey, defaultURL)
+
         requestForWebview()
 
         btnTryAgain.setOnClickListener {
             mWebView.visibility = View.GONE
             prgs.visibility = View.VISIBLE
-            SwipeRefreshLayout.isRefreshing = true
-            //layoutSplash.visibility = View.VISIBLE
-            //layoutNoInternet.visibility = View.GONE
+            swipeRefreshLayout.isRefreshing = true
             requestForWebview()
         }
 
-        /** If you want to show adMob */
-        //showAdMob();
-
-        /*var secret: SecretKey? = null
-        val toEncrypt = URL
-        try {
-            secret = generateKey()
-            val toDecrypt = encryptMsg(toEncrypt, secret)
-
-            Log.d(TAG, toDecrypt.toString())
-
-            Log.d(TAG, decryptMsg(toDecrypt, secret))
-        } catch (e: Exception) {
-            Log.e(TAG, "" + e.message)
-        }*/
-
+        checkUpdate()
     }
 
-
     private fun requestForWebview() {
-
-        if (! mLoaded) {
+        if (!mLoaded) {
             requestWebView()
             Handler().postDelayed({
-                SwipeRefreshLayout.isRefreshing = true
+                swipeRefreshLayout.isRefreshing = true
                 prgs.visibility = View.VISIBLE
-                //viewSplash.getBackground().setAlpha(145);
                 mWebView.visibility = View.VISIBLE
-            } ,200)
-
+            }, 200)
         } else {
             mWebView.visibility = View.VISIBLE
             prgs.visibility = View.GONE
-            SwipeRefreshLayout.isRefreshing = false
-            //layoutSplash.visibility = View.GONE
-            //layoutNoInternet.visibility = View.GONE
+            swipeRefreshLayout.isRefreshing = false
         }
-
     }
 
     @SuppressLint("SetJavaScriptEnabled")
-    @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
+    @RequiresApi(Build.VERSION_CODES.LOLLIPOP)
     private fun requestWebView() {
-        /** Layout of webview screen View  */
+        mWebView.settings.apply {
+            javaScriptEnabled = true
+            domStorageEnabled = true
+            cacheMode = WebSettings.LOAD_DEFAULT
+            mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+            setSupportMultipleWindows(false)
+        }
+
         if (internetCheck(mContext)) {
             mWebView.visibility = View.VISIBLE
-            //layoutNoInternet.visibility = View.GONE
-            mWebView.loadUrl(URL)
-
-            mWebView.saveWebArchive(path_web + File.separator + mWebView.title + ".mhtml")
-            SwipeRefreshLayout.isRefreshing = true
+            mWebView.loadUrl(currentURL!!)
         } else {
-            //prgs.visibility = View.GONE
-            //mWebView.visibility = View.GONE
-            //layoutSplash.visibility = View.GONE
-            //layoutNoInternet.visibility = View.VISIBLE
-
-            //mWebView.loadUrl(URL)
-            mWebView.loadUrl("file://" + path_web + File.separator + mWebView.title + ".mhtml")
-
-            //return
+            Toast.makeText(this, "No internet connection", Toast.LENGTH_LONG).show()
         }
-        mWebView.isFocusable = true
-        mWebView.isFocusableInTouchMode = true
-        mWebView.settings.javaScriptEnabled = true
-        mWebView.scrollBarStyle = View.SCROLLBARS_INSIDE_OVERLAY
-        mWebView.settings.setRenderPriority(RenderPriority.HIGH)
-        mWebView.settings.cacheMode = WebSettings.LOAD_DEFAULT
-        mWebView.settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-        mWebView.settings.cacheMode(WebSettings.LOAD_CACHE_ELSE_NETWORK)
-        mWebView.settings.domStorageEnabled = true
-        mWebView.settings.setAppCacheEnabled(true)
-        mWebView.settings.databaseEnabled = true
-        SwipeRefreshLayout.isRefreshing = true
-        //mWebView.getSettings().setDatabasePath(
-        //        this.getFilesDir().getPath() + this.getPackageName() + "/databases/");
 
-        // this force use chromeWebClient
-        mWebView.settings.setSupportMultipleWindows(false)
         mWebView.webViewClient = object : WebViewClient() {
-            override fun shouldOverrideUrlLoading(view: WebView ,url: String?): Boolean {
-
-                Log.d(TAG ,"URL: " + url !!)
-                if (internetCheck(mContext)) {
-                    // If you wnat to open url inside then use
-                    view.loadUrl(url);
-
-                    // if you wanna open outside of app
-                    /*if (url.contains(URL)) {
-                        view.loadUrl(url)
-                        return false
-                    }else {
-                        // Otherwise, give the default behavior (open in browser)
-                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                        startActivity(intent)
-                        return true
-                    }*/
-                } else {
-                    prgs.visibility = View.GONE
-                    mWebView.visibility = View.GONE
-                    //layoutSplash.visibility = View.GONE
-                    //layoutNoInternet.visibility = View.VISIBLE
-                }
-
+            override fun shouldOverrideUrlLoading(view: WebView, url: String?): Boolean {
+                if (internetCheck(mContext)) view.loadUrl(url!!)
+                else Toast.makeText(mContext, "No internet", Toast.LENGTH_SHORT).show()
                 return true
             }
 
-            /* @Override
-            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-                if(internetCheck(mContext)) {
-                    mWebView.setVisibility(View.VISIBLE);
-                    layoutNoInternet.setVisibility(View.GONE);
-                    //view.loadUrl(url);
-                }else{
-                    prgs.setVisibility(View.GONE);
-                    mWebView.setVisibility(View.GONE);
-                    layoutSplash.setVisibility(View.GONE);
-                    layoutNoInternet.setVisibility(View.VISIBLE);
-                }
-                return false;
-            }*/
-
-            override fun onPageStarted(view: WebView ,url: String ,favicon: Bitmap?) {
-                super.onPageStarted(view ,url ,favicon)
-                SwipeRefreshLayout.isRefreshing = true
-                if (prgs.visibility == View.GONE) {
-                    prgs.visibility = View.VISIBLE
-                }
+            override fun onPageStarted(view: WebView, url: String, favicon: android.graphics.Bitmap?) {
+                super.onPageStarted(view, url, favicon)
+                swipeRefreshLayout.isRefreshing = true
+                if (prgs.visibility == View.GONE) prgs.visibility = View.VISIBLE
             }
 
-            override fun onLoadResource(view: WebView ,url: String) {
-                super.onLoadResource(view ,url)
-            }
-
-            override fun onPageFinished(view: WebView ,url: String) {
-                super.onPageFinished(view ,url)
-                //mWebView.clearCache(true)
+            override fun onPageFinished(view: WebView, url: String) {
+                super.onPageFinished(view, url)
                 mLoaded = true
-                SwipeRefreshLayout.isRefreshing = false
+                swipeRefreshLayout.isRefreshing = false
+                if (prgs.visibility == View.VISIBLE) prgs.visibility = View.GONE
 
+                currentURL = url
+                val prefs = getSharedPreferences(prefsName, Context.MODE_PRIVATE)
+                prefs.edit().putString(lastUrlKey, url).apply()
 
-                //mWebView.loadUrl("file://" + file.absolutePath + ".mht")
-                mWebView.saveWebArchive(path_web + File.separator + mWebView.title + ".mhtml")
-                if (prgs.visibility == View.VISIBLE)
-                    prgs.visibility = View.GONE
+                // ???? ????
+                val authPrefs = getSharedPreferences("auth", Context.MODE_PRIVATE)
+                val login = authPrefs.getString("login", "")
+                val password = authPrefs.getString("password", "")
 
-                // check if layoutSplash is still there, get it away!
-                Handler().postDelayed({
-                    //layoutSplash.visibility = View.GONE
-                    //viewSplash.getBackground().setAlpha(255);
-                } ,200)
+                if (!login.isNullOrEmpty() && !password.isNullOrEmpty()) {
+                    mWebView.evaluateJavascript("""
+                        (function waitForLogin() {
+                            var loginField = document.querySelector('input[type="text"], input[name*="login"], input[id*="login"]');
+                            var passField = document.querySelector('input[type="password"]');
+                            var loginButton = document.querySelector('button[type="submit"], input[type="submit"]');
+                            if (loginField && passField) {
+                                loginField.value = '$login';
+                                passField.value = '$password';
+                                if(loginButton) loginButton.click();
+                            } else setTimeout(waitForLogin, 500);
+                        })();
+                    """.trimIndent(), null)
+                }
             }
         }
 
-        //file attach request
-        mWebView.webChromeClient = object : WebChromeClient() {
-            override fun onShowFileChooser(
-                webView: WebView ,filePathCallback: ValueCallback<Array<Uri>> ,
-                fileChooserParams: FileChooserParams
-            ): Boolean {
-                if (mFilePathCallback != null) {
-                    mFilePathCallback !!.onReceiveValue(null)
-                }
-                mFilePathCallback = filePathCallback
+        // ????????? ?????? ? ???????? ???????
+        mWebView.setDownloadListener { url, userAgent, contentDisposition, mimetype, _ ->
+            try {
+                var filename = URLUtil.guessFileName(url, contentDisposition, mimetype)
 
-                var takePictureIntent: Intent? = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
-                if (takePictureIntent !!.resolveActivity(this@MainActivity.packageManager) != null) {
-                    // Create the File where the photo should go
-                    var photoFile: File? = null
-                    try {
-                        photoFile = createImageFile()
-                        takePictureIntent.putExtra("PhotoPath" ,mCameraPhotoPath)
-                    } catch (ex: IOException) {
-                        // Error occurred while creating the File
-                        Log.e(TAG ,"Unable to create Image File" ,ex)
-                    }
-
-                    // Continue only if the File was successfully created
-                    if (photoFile != null) {
-                        mCameraPhotoPath = "file:" + photoFile.absolutePath
-                        takePictureIntent.putExtra(
-                            MediaStore.EXTRA_OUTPUT ,
-                            Uri.fromFile(photoFile)
-                        )
+                if (!contentDisposition.isNullOrEmpty()) {
+                    val regexUtf = Regex("filename\\*=UTF-8''(.+)")
+                    val matchUtf = regexUtf.find(contentDisposition)
+                    if (matchUtf != null) {
+                        filename = Uri.decode(matchUtf.groupValues[1])
                     } else {
-                        takePictureIntent = null
+                        val regex = Regex("filename=\"([^\"]+)\"")
+                        val match = regex.find(contentDisposition)
+                        if (match != null) filename = match.groupValues[1]
                     }
                 }
 
-                val contentSelectionIntent = Intent(Intent.ACTION_GET_CONTENT)
-                contentSelectionIntent.addCategory(Intent.CATEGORY_OPENABLE)
-                contentSelectionIntent.type = "image/*"
+                if (filename.isBlank() || filename.toLowerCase(Locale.getDefault()) == "download") { filename = "file_" + System.currentTimeMillis() }
 
-                val intentArray: Array<Intent?>
-                if (takePictureIntent != null) {
-                    intentArray = arrayOf(takePictureIntent)
-                } else {
-                    intentArray = arrayOfNulls(0)
+                val safeFilename = filename.replace("[\\\\/:*?\"<>|]".toRegex(), "_")
+
+                val request = DownloadManager.Request(Uri.parse(url))
+                val cookie = CookieManager.getInstance().getCookie(url)
+                request.addRequestHeader("Cookie", cookie)
+                request.addRequestHeader("User-Agent", userAgent)
+                request.setTitle(filename)
+                request.setDescription("Downloading file...")
+                request.allowScanningByMediaScanner()
+                request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, safeFilename)
+
+                val dm = getSystemService(DOWNLOAD_SERVICE) as DownloadManager
+                dm.enqueue(request)
+
+                Toast.makeText(this, filename, Toast.LENGTH_LONG).show()
+            } catch (e: Exception) {
+                Toast.makeText(this, "Error downloading: ${e.message}", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    /** ?????????????? **/
+    private fun checkUpdate() {
+        Thread {
+            try {
+                val versionUrl = "https://raw.githubusercontent.com/elchupacabr/studapp/refs/heads/main/latest_version.txt"
+                val url = URL(versionUrl)
+                val connection = url.openConnection() as HttpURLConnection
+                connection.requestMethod = "GET"
+                connection.connectTimeout = 5000
+                connection.readTimeout = 5000
+
+                val reader = BufferedReader(InputStreamReader(connection.inputStream))
+                val latestVersion = reader.readLine().trim()
+                reader.close()
+                connection.disconnect()
+
+                val currentVersion = BuildConfig.VERSION_NAME
+                if (currentVersion != latestVersion) {
+                    runOnUiThread {
+                        Toast.makeText(this, "A new version is available v$latestVersion", Toast.LENGTH_LONG).show()
+                        downloadApk(latestVersion)
+                    }
                 }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    Toast.makeText(this, "Error checking update: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+        }.start()
+    }
 
-                val chooserIntent = Intent(Intent.ACTION_CHOOSER)
-                chooserIntent.putExtra(Intent.EXTRA_INTENT ,contentSelectionIntent)
-                chooserIntent.putExtra(Intent.EXTRA_TITLE ,"Image Chooser")
-                chooserIntent.putExtra(Intent.EXTRA_INITIAL_INTENTS ,intentArray)
+    private fun downloadApk(version: String) {
+        try {
+            val apkUrl = "https://github.com/elchupacabr/studapp/releases/download/v.$version/app-debug.apk"
+            val filename = "studapp_v$version.apk"
 
-                startActivityForResult(chooserIntent ,INPUT_FILE_REQUEST_CODE)
+            val request = DownloadManager.Request(Uri.parse(apkUrl))
+            request.setTitle("Downloading update")
+            request.setDescription("Downloading version $version")
+            request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+            request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, filename)
+            request.setMimeType("application/vnd.android.package-archive")
+            request.setAllowedOverMetered(true)
+            request.setAllowedOverRoaming(true)
 
+            val dm = getSystemService(DOWNLOAD_SERVICE) as DownloadManager
+            val downloadId = dm.enqueue(request)
+            Toast.makeText(this, "Started downloading update", Toast.LENGTH_SHORT).show()
+
+            val onComplete = object : BroadcastReceiver() {
+                override fun onReceive(context: Context, intent: Intent) {
+                    val uri = dm.getUriForDownloadedFile(downloadId)
+                    val installIntent = Intent(Intent.ACTION_VIEW)
+                    installIntent.setDataAndType(uri, "application/vnd.android.package-archive")
+                    installIntent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    startActivity(installIntent)
+                    unregisterReceiver(this)
+                }
+            }
+            registerReceiver(onComplete, IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE))
+        } catch (e: Exception) {
+            Toast.makeText(this, "Error downloading update: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        when (keyCode) {
+            KeyEvent.KEYCODE_BACK -> {
+                if (mWebView.canGoBack()) {
+                    mWebView.goBack()
+                    return true
+                }
+                if (doubleBackToExitPressedOnce) return super.onKeyDown(keyCode, event)
+                doubleBackToExitPressedOnce = true
+                Toast.makeText(this, "Please press Back to Exit", Toast.LENGTH_SHORT).show()
+                Handler().postDelayed({ doubleBackToExitPressedOnce = false }, 500)
                 return true
             }
+            else -> return super.onKeyDown(keyCode, event) // Volume ? ????????? ?????? ?????????????? ????????
         }
-
-        //handle downloading
-
-        //handle downloading
-        mWebView.setDownloadListener { url ,userAgent ,contentDisposition ,mimetype ,contentLength ->
-            val i = Intent(Intent.ACTION_VIEW)
-            i.data = Uri.parse(url)
-            startActivity(i)
-
-        }
-        //val a = Intent(this, MainActivity::class.java)
-        //startActivity(a)
     }
 
-    @Throws(IOException::class)
-    private fun createImageFile(): File {
-        // Create an image file name
-        val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss").format(Date())
-        val imageFileName = "JPEG_" + timeStamp + "_"
-        val storageDir = Environment.getExternalStoragePublicDirectory(
-            Environment.DIRECTORY_PICTURES
-        )
-        return File.createTempFile(
-            imageFileName , /* prefix */
-            ".jpg" , /* suffix */
-            storageDir      /* directory */
-        )
-    }
-
-
-    /**
-     * Convenience method to set some generic defaults for a
-     * given WebView
-     */
-    /*@TargetApi(Build.VERSION_CODES.HONEYCOMB)
-    private void setUpWebViewDefaults(WebView webView) {
-        WebSettings settings = webView.getSettings();
-
-        // Enable Javascript
-        settings.setJavaScriptEnabled(true);
-
-        // Use WideViewport and Zoom out if there is no viewport defined
-        settings.setUseWideViewPort(true);
-        settings.setLoadWithOverviewMode(true);
-
-        // Enable pinch to zoom without the zoom buttons
-        settings.setBuiltInZoomControls(true);
-
-        if(Build.VERSION.SDK_INT > Build.VERSION_CODES.HONEYCOMB) {
-            // Hide the zoom controls for HONEYCOMB+
-            settings.setDisplayZoomControls(false);
-        }
-
-        // Enable remote debugging via chrome://inspect
-        if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
-            WebView.setWebContentsDebuggingEnabled(true);
-        }
-
-        // We set the WebViewClient to ensure links are consumed by the WebView rather
-        // than passed to a browser if it can
-        mWebView.setWebViewClient(new WebViewClient());
-    }*/
-
-    public override fun onActivityResult(requestCode: Int ,resultCode: Int ,data: Intent?) {
-        if (requestCode != INPUT_FILE_REQUEST_CODE || mFilePathCallback == null) {
-            super.onActivityResult(requestCode ,resultCode ,data)
-            return
-        }
-
-        var results: Array<Uri>? = null
-
-        // Check that the response is a good one
-        if (resultCode == RESULT_OK) {
-            if (data == null) {
-                // If there is not data, then we may have taken a photo
-                if (mCameraPhotoPath != null) {
-                    results = arrayOf(Uri.parse(mCameraPhotoPath))
-                }
-            } else {
-                val dataString = data.dataString
-                if (dataString != null) {
-                    results = arrayOf(Uri.parse(dataString))
-                }
-            }
-        }
-
-        mFilePathCallback !!.onReceiveValue(results)
-        mFilePathCallback = null
-        return
-    }
-
-
-    private fun showAdMob() {
-        /** Layout of AdMob screen View  */
-        /*layoutFooter = (LinearLayout) findViewById(R.id.layout_footer);
-          adView = (AdView) findViewById(R.id.adMob);
-          try {
-           if(internetCheck(mContext)){
-               //initializeAdMob();
-           }else{
-               Log.d("---------","--no internet-");
-           }
-       }catch (Exception ex){
-           Log.d("-----------", ""+ex);
-       }*/
-    }
-
-    override fun onKeyDown(keyCode: Int ,event: KeyEvent): Boolean {
-        if (keyCode == KeyEvent.KEYCODE_BACK && mWebView.canGoBack()) {
-            mWebView.goBack()
-            return true
-        }
-
-        if (doubleBackToExitPressedOnce) {
-            return super.onKeyDown(keyCode ,event)
-        }
-
-        this.doubleBackToExitPressedOnce = true
-        Toast.makeText(this ,"Please click BACK again to exit" ,Toast.LENGTH_SHORT).show()
-
-        Handler().postDelayed({ doubleBackToExitPressedOnce = false } ,500)
-        return true
-    }
 
     companion object {
-        internal var TAG = "---MainActivity"
-        val INPUT_FILE_REQUEST_CODE = 1
-        val EXTRA_FROM_NOTIFICATION = "EXTRA_FROM_NOTIFICATION"
-
-
-        //for security
-        @Throws(NoSuchAlgorithmException::class ,InvalidKeySpecException::class)
-        fun generateKey(): SecretKey {
-            val random = SecureRandom()
-            val key = byteArrayOf(1 ,0 ,0 ,0 ,0 ,0 ,0 ,1 ,1 ,1 ,0 ,1 ,0 ,0 ,0 ,0)
-            //random.nextBytes(key);
-            return SecretKeySpec(key ,"AES")
-        }
-
-        /*@Throws(NoSuchAlgorithmException::class, NoSuchPaddingException::class, InvalidKeyException::class, InvalidParameterSpecException::class, IllegalBlockSizeException::class, BadPaddingException::class, UnsupportedEncodingException::class)
-        fun encryptMsg(message: String, secret: SecretKey): ByteArray {
-            var cipher: Cipher? = null
-            cipher = Cipher.getInstance("AES/ECB/PKCS5Padding")
-            cipher!!.init(Cipher.ENCRYPT_MODE, secret)
-            return cipher.doFinal(message.toByteArray(charset("UTF-8")))
-        }
-
-        @Throws(NoSuchPaddingException::class, NoSuchAlgorithmException::class, InvalidParameterSpecException::class, InvalidAlgorithmParameterException::class, InvalidKeyException::class, BadPaddingException::class, IllegalBlockSizeException::class, UnsupportedEncodingException::class)
-        fun decryptMsg(cipherText: ByteArray, secret: SecretKey): String {
-            var cipher: Cipher? = null
-            cipher = Cipher.getInstance("AES/ECB/PKCS5Padding")
-            cipher!!.init(Cipher.DECRYPT_MODE, secret)
-            return String(cipher.doFinal(cipherText), charset("UTF-8"))
-        }*/
-
-
-        /**** Initial AdMob  */
-        /**
-         * private void initializeAdMob() {
-         * Log.d("----","Initial Call");
-         * adView.setVisibility(View.GONE);
-         * AdRequest adRequest = new AdRequest.Builder()
-         * .addTestDevice(AdRequest.DEVICE_ID_EMULATOR)        // All emulators
-         * //.addTestDevice("F901B815E265F8281206A2CC49D4E432")
-         * .build();
-         * adView.setAdListener(new AdListener() {
-         * @Override
-         * public void onAdLoaded() {
-         * super.onAdLoaded();
-         * runOnUiThread(new Runnable() {
-         * @Override
-         * public void run() {
-         * adView.setVisibility(View.VISIBLE);
-         * Log.d("----","Visible");
-         * }
-         * });
-         * }
-         * });
-         * adView.loadAd(adRequest);
-         * }
-         */
-        /**
-         * public static void showAlertDialog(Context mContext, String mTitle, String mBody, int mImage){
-         * android.support.v7.app.AlertDialog.Builder builder = new android.support.v7.app.AlertDialog.Builder(mContext);
-         * builder.setCancelable(true);
-         * builder.setIcon(mImage);
-         * if(mTitle.length()>0)
-         * builder.setTitle(mTitle);
-         * if(mBody.length()>0)
-         * builder.setTitle(mBody);
-         *
-         * builder.setPositiveButton("OK",new DialogInterface.OnClickListener() {
-         * @Override
-         * public void onClick(DialogInterface dialog, int which) {
-         * dialog.dismiss();
-         * }
-         * });
-         *
-         * builder.create().show();
-         * } */
-
         fun internetCheck(context: Context): Boolean {
-            var available = false
             val connectivity = context.getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager
-
-            if (connectivity != null) {
-                val networkInfo = connectivity.allNetworkInfo
-                if (networkInfo != null) {
-                    for (i in networkInfo.indices) {
-                        if (networkInfo[i].state == NetworkInfo.State.CONNECTED) {
-                            available = true
-                            break
-                        }
-                    }
-                }
-            }
-            return available
+            val networkInfo = connectivity.allNetworkInfo
+            return networkInfo?.any { it.state == NetworkInfo.State.CONNECTED } ?: false
         }
     }
-
-}
-
-private operator fun Int.invoke(loadCacheElseNetwork: Int) {
-
 }

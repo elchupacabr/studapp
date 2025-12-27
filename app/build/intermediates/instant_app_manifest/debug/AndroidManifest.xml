@@ -3,7 +3,7 @@
     package="com.elchupacabrsoft.stud.sssu"
     android:targetSandboxVersion="2"
     android:versionCode="1"
-    android:versionName="1.2" >
+    android:versionName="3.2" >
 
     <uses-sdk
         android:minSdkVersion="21"
@@ -12,6 +12,7 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
 
     <application

@@ -1,7 +1,7 @@
-#Mon Jan 15 22:44:16 MSK 2024
-base.1=C\:\\Users\\nightmafia895\\AndroidStudioProjects\\Android-WebView-in-Kotlin-master-remastered\\app\\build\\intermediates\\dex\\debug\\mergeProjectDexDebug\\out\\classes.dex
+#Sat Dec 27 18:51:12 MSK 2025
+base.1=C\:\\Users\\el4upackabr\\Desktop\\studapp-main\\app\\build\\intermediates\\dex\\debug\\mergeProjectDexDebug\\out\\classes.dex
 path.1=classes.dex
-base.0=C\:\\Users\\nightmafia895\\AndroidStudioProjects\\Android-WebView-in-Kotlin-master-remastered\\app\\build\\intermediates\\dex\\debug\\mergeExtDexDebug\\out\\classes.dex
+base.0=C\:\\Users\\el4upackabr\\Desktop\\studapp-main\\app\\build\\intermediates\\dex\\debug\\mergeExtDexDebug\\out\\classes.dex
 renamed.1=classes2.dex
 renamed.0=classes.dex
 path.0=classes.dex

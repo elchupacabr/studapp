@@ -1,10 +1,10 @@
 {
     "logs": [
         {
-            "outputFile": "C:\\Users\\nightmafia895\\AndroidStudioProjects\\Android-WebView-in-Kotlin-master-remastered\\app\\build\\intermediates\\incremental\\mergeDebugResources\\merged.dir\\values-night-v8\\values-night-v8.xml",
+            "outputFile": "C:\\Users\\el4upackabr\\Desktop\\studapp-main\\app\\build\\intermediates\\incremental\\mergeDebugResources\\merged.dir\\values-night-v8\\values-night-v8.xml",
             "map": [
                 {
-                    "source": "C:\\Users\\nightmafia895\\.gradle\\caches\\transforms-2\\files-2.1\\deeaa13cc110c3252da2e343eb74d0cd\\appcompat-1.0.0\\res\\values-night-v8\\values-night-v8.xml",
+                    "source": "D:\\.gradle\\caches\\transforms-2\\files-2.1\\deeaa13cc110c3252da2e343eb74d0cd\\appcompat-1.0.0\\res\\values-night-v8\\values-night-v8.xml",
                     "from": {
                         "startLines": "2,3,4,5,6,7,8",
                         "startColumns": "4,4,4,4,4,4,4",

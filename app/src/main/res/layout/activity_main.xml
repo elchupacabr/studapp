@@ -11,12 +11,14 @@
         android:id="@+id/layout_webview"
         android:layout_width="match_parent"
         android:layout_height="match_parent">
+
         <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
             android:id="@+id/swipe_containers"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
 
             >
+
 
             <WebView
                 android:id="@+id/webview"
