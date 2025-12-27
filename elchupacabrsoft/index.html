@@ -1,1 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<body>
+    Актуальная версия <span id="version">загрузка...</span>
 
+    <script>
+        fetch('https://raw.githubusercontent.com/elchupacabr/studapp/refs/heads/main/latest_version.txt')
+            .then(response => {
+                if (!response.ok) throw new Error('Ошибка при загрузке версии');
+                return response.text();
+            })
+            .then(text => {
+                document.getElementById('version').textContent = text.trim();
+            })
+            .catch(error => {
+                document.getElementById('version').textContent = 'не удалось загрузить';
+                console.error(error);
+            });
+    </script>
+</body>
+</html>
