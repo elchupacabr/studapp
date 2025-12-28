@@ -2,7 +2,7 @@
 2<manifest xmlns:android="http://schemas.android.com/apk/res/android"
 3    package="com.elchupacabrsoft.stud.sssu"
 4    android:versionCode="1"
-5    android:versionName="3.2" >
+5    android:versionName="3.5" >
 6
 7    <uses-sdk
 8        android:minSdkVersion="21"
@@ -27,11 +27,11 @@
 15-->C:\Users\el4upackabr\Desktop\studapp-main\app\src\main\AndroidManifest.xml:8:22-77
 16
 17    <application
-17-->C:\Users\el4upackabr\Desktop\studapp-main\app\src\main\AndroidManifest.xml:11:5-25:19
+17-->C:\Users\el4upackabr\Desktop\studapp-main\app\src\main\AndroidManifest.xml:11:5-26:19
 18        android:allowBackup="true"
 18-->C:\Users\el4upackabr\Desktop\studapp-main\app\src\main\AndroidManifest.xml:12:9-35
 19        android:appComponentFactory="androidx.core.app.CoreComponentFactory"
-19-->[androidx.core:core:1.0.0] D:\.gradle\caches\transforms-2\files-2.1\51bd038869f1ae39159a0a8fbe7b2ffe\core-1.0.0\AndroidManifest.xml:22:18-86
+19-->[androidx.core:core:1.0.0] D:\.gradle\caches\transforms-2\files-2.1\da9aa28d2c46c215ce339e5cee1ef0dd\core-1.0.0\AndroidManifest.xml:22:18-86
 20        android:debuggable="true"
 21        android:icon="@mipmap/ic_launcher"
 21-->C:\Users\el4upackabr\Desktop\studapp-main\app\src\main\AndroidManifest.xml:13:9-43
@@ -41,22 +41,23 @@
 23-->C:\Users\el4upackabr\Desktop\studapp-main\app\src\main\AndroidManifest.xml:15:9-54
 24        android:supportsRtl="true"
 24-->C:\Users\el4upackabr\Desktop\studapp-main\app\src\main\AndroidManifest.xml:16:9-35
-25        android:theme="@style/AppTheme" >
-25-->C:\Users\el4upackabr\Desktop\studapp-main\app\src\main\AndroidManifest.xml:17:9-40
-26        <activity android:name="elchupacabrsoft.stud.sssu.MainActivity" >
-26-->C:\Users\el4upackabr\Desktop\studapp-main\app\src\main\AndroidManifest.xml:18:9-24:20
-26-->C:\Users\el4upackabr\Desktop\studapp-main\app\src\main\AndroidManifest.xml:18:19-47
-27            <intent-filter>
-27-->C:\Users\el4upackabr\Desktop\studapp-main\app\src\main\AndroidManifest.xml:19:13-23:29
-28                <action android:name="android.intent.action.MAIN" />
-28-->C:\Users\el4upackabr\Desktop\studapp-main\app\src\main\AndroidManifest.xml:20:17-69
-28-->C:\Users\el4upackabr\Desktop\studapp-main\app\src\main\AndroidManifest.xml:20:25-66
-29
-30                <category android:name="android.intent.category.LAUNCHER" />
-30-->C:\Users\el4upackabr\Desktop\studapp-main\app\src\main\AndroidManifest.xml:22:17-77
-30-->C:\Users\el4upackabr\Desktop\studapp-main\app\src\main\AndroidManifest.xml:22:27-74
-31            </intent-filter>
-32        </activity>
-33    </application>
-34
-35</manifest>
+25        android:testOnly="true"
+26        android:theme="@style/AppTheme" >
+26-->C:\Users\el4upackabr\Desktop\studapp-main\app\src\main\AndroidManifest.xml:17:9-40
+27        <activity android:name="elchupacabrsoft.stud.sssu.MainActivity" >
+27-->C:\Users\el4upackabr\Desktop\studapp-main\app\src\main\AndroidManifest.xml:18:9-24:20
+27-->C:\Users\el4upackabr\Desktop\studapp-main\app\src\main\AndroidManifest.xml:18:19-47
+28            <intent-filter>
+28-->C:\Users\el4upackabr\Desktop\studapp-main\app\src\main\AndroidManifest.xml:19:13-23:29
+29                <action android:name="android.intent.action.MAIN" />
+29-->C:\Users\el4upackabr\Desktop\studapp-main\app\src\main\AndroidManifest.xml:20:17-69
+29-->C:\Users\el4upackabr\Desktop\studapp-main\app\src\main\AndroidManifest.xml:20:25-66
+30
+31                <category android:name="android.intent.category.LAUNCHER" />
+31-->C:\Users\el4upackabr\Desktop\studapp-main\app\src\main\AndroidManifest.xml:22:17-77
+31-->C:\Users\el4upackabr\Desktop\studapp-main\app\src\main\AndroidManifest.xml:22:27-74
+32            </intent-filter>
+33        </activity>
+34    </application>
+35
+36</manifest>

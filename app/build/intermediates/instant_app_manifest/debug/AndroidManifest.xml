@@ -3,7 +3,7 @@
     package="com.elchupacabrsoft.stud.sssu"
     android:targetSandboxVersion="2"
     android:versionCode="1"
-    android:versionName="3.2" >
+    android:versionName="3.5" >
 
     <uses-sdk
         android:minSdkVersion="21"
@@ -23,6 +23,7 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
+        android:testOnly="true"
         android:theme="@style/AppTheme" >
         <activity android:name="elchupacabrsoft.stud.sssu.MainActivity" >
             <intent-filter>
