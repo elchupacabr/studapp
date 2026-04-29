@@ -133,8 +133,6 @@ def get_all_groups(year=None):
     current_time = datetime.now().timestamp()
     
     # Используем год в ключе кэша
-    cache_key = f"{year}_{current_time // CACHE_TIMEOUT}"
-    
     if groups_cache["data"] and groups_cache.get("year") == year:
         if (current_time - groups_cache["timestamp"]) < CACHE_TIMEOUT:
             return groups_cache["data"]
@@ -173,10 +171,23 @@ def find_group_by_name(search_name, year=None):
         if group["name"].lower().startswith(search_name_lower):
             return group["id"], group["name"], []
     
-    # Поиск похожих
-    all_names = [g["name"] for g in all_groups]
-    matches = difflib.get_close_matches(search_name_lower, [n.lower() for n in all_names], n=5, cutoff=0.6)
-    original_matches = [all_names[all_names.index(m)] for m in matches if m in [n.lower() for n in all_names]]
+    # Поиск похожих названий
+    all_names_lower = [g["name"].lower() for g in all_groups]
+    all_names_original = [g["name"] for g in all_groups]
+    
+    matches = difflib.get_close_matches(search_name_lower, all_names_lower, n=5, cutoff=0.6)
+    
+    # Безопасно находим оригинальные названия
+    original_matches = []
+    for match_lower in matches:
+        try:
+            # Находим индекс в списке lower-версий
+            index = all_names_lower.index(match_lower)
+            # Берём оригинальное название по тому же индексу
+            original_matches.append(all_names_original[index])
+        except ValueError:
+            # Если вдруг не нашли - пропускаем
+            continue
     
     return None, None, original_matches
 
