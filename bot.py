@@ -54,8 +54,8 @@ Thread(target=run_health_server, daemon=True).start()
 # ========== ДАЛЬШЕ ВАШ ОСНОВНОЙ КОД ==========
 # ... (все остальные функции: get_schedule, fetch_available_dates и т.д.)
 # ========== НАСТРОЙКИ ==========
-VK_TOKEN = "vk1.a.dhQU8BDzoI-qxTFqJcZog2recEWuNW4uebV72GlVYYV6m-o9A_pzHBnA0w2YXqRHJSbEeroIvNBb0535Ie1y_eIBkWVencSd2xWLNgukIHOEp_17wAXS5VrQ8DB2m1Eon8Q4u2IpVsYooyBTyo57amz9fKPfIrOYZxOoeP6woo3f-8Guf-1v92fX3_E19oEqiQKjj_9gftJjp_CAnHXQ8A"
-GROUP_ID = 38232620  # ID вашего VK сообщества
+VK_TOKEN = "vk1.a.caFxSOtgxlqz1GOqzR5VUhDTxl6Yi7Nhz2-n5bJ3Za8RCAQKsweYPbQtZQRLKYlmWQhg_mPFQ9UKppanLGRKkVVEOmhXYnN9b4hpmJ3jmcrCvZhafBGhWEwR77FFR0OKR2tJi4x-AZ73hc6rr4R0N1iKkHwvqBxdoqJ3P21AHEHTT1Cf538JnbyCUcwAaH8OiIHC10p6nQRLrW6vPifD3Q"
+GROUP_ID = 238232620  # ID вашего VK сообщества
 
 API_BASE_URL = "https://stud.sssu.ru/api/Rasp"
 API_DATES_URL = "https://stud.sssu.ru/api/GetRaspDates"
