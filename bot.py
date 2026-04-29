@@ -371,24 +371,35 @@ def get_next_lesson(group_id):
     
     return result
 
-def get_schedule_range(group_id, start_date, days=7):
-    """Расписание на диапазон дат - точное соответствие сайту"""
+def get_current_week_range():
+    """Возвращает даты понедельника и воскресенья текущей недели"""
+    today = datetime.now()
+    # Понедельник текущей недели (weekday() где 0 = понедельник)
+    monday = today - timedelta(days=today.weekday())
+    # Воскресенье текущей недели
+    sunday = monday + timedelta(days=6)
+    return monday.strftime("%Y-%m-%d"), sunday.strftime("%Y-%m-%d")
+
+def get_schedule_for_current_week(group_id):
+    """Расписание на текущую неделю (с понедельника по воскресенье)"""
+    start_date, end_date = get_current_week_range()
     
-    # Получаем все доступные даты
+    # Получаем все доступные даты с занятиями
     all_dates = fetch_available_dates(group_id)
     
-    # Вычисляем конечную дату
-    start_obj = datetime.strptime(start_date, "%Y-%m-%d")
-    end_obj = start_obj + timedelta(days=days-1)
-    end_date = end_obj.strftime("%Y-%m-%d")
-    
-    # Фильтруем даты в нужном диапазоне
+    # Фильтруем даты в диапазоне текущей недели
     target_dates = sorted([d for d in all_dates if start_date <= d <= end_date])
     
     if not target_dates:
-        return "📭 В указанном периоде занятий нет"
+        start_obj = datetime.strptime(start_date, "%Y-%m-%d")
+        end_obj = datetime.strptime(end_date, "%Y-%m-%d")
+        return f"📭 На текущей неделе ({start_obj.strftime('%d.%m')}–{end_obj.strftime('%d.%m')}) занятий нет"
     
-    result = f"📅 РАСПИСАНИЕ НА НЕДЕЛЮ\n"
+    # Формируем заголовок
+    start_obj = datetime.strptime(start_date, "%Y-%m-%d")
+    end_obj = datetime.strptime(end_date, "%Y-%m-%d")
+    
+    result = f"📅 РАСПИСАНИЕ НА ТЕКУЩУЮ НЕДЕЛЮ\n"
     result += f"📆 {start_obj.strftime('%d.%m')} – {end_obj.strftime('%d.%m.%Y')}\n"
     result += "=" * 40 + "\n\n"
     
@@ -397,7 +408,6 @@ def get_schedule_range(group_id, start_date, days=7):
         # Получаем данные за конкретный день
         data, error = fetch_schedule(group_id, date)
         if error or not data:
-            result += f"❌ Ошибка загрузки {date}: {error}\n\n"
             continue
         
         rasp_list = data.get("data", {}).get("rasp", [])
@@ -409,8 +419,8 @@ def get_schedule_range(group_id, start_date, days=7):
         weekday = get_weekday_rus(date_obj.weekday())
         date_short = date_obj.strftime("%d.%m")
         
-        result += f"📌 {weekday.upper()} {date_short}\n"
-        result += "─" * 30 + "\n"
+        result += f"📌 {weekday.upper()} ({date_short})\n"
+        result += "─" * 35 + "\n"
         
         # Сортируем занятия по времени начала
         sorted_lessons = sorted(rasp_list, key=lambda x: x.get("начало", "00:00"))
@@ -436,13 +446,86 @@ def get_schedule_range(group_id, start_date, days=7):
                 clean_discipline = discipline[4:]
                 lesson_type_short = "ЛАБ"
             
-            result += f"⏰ {time_start}\n"
+            result += f"⏰ {time_start}–{time_end}"
             if lesson_type_short:
-                result += f"   {lesson_type_short} {clean_discipline}\n"
-            else:
-                result += f"   {clean_discipline}\n"
-            result += f"   👨‍🏫 {teacher}\n"
-            result += f"   🏫 {room}\n\n"
+                result += f"  [{lesson_type_short}]"
+            result += f"\n   📚 {clean_discipline}\n"
+            result += f"   👨‍🏫 {teacher}  |  🏫 {room}\n\n"
+        
+        result += "\n"
+    
+    return result
+
+def get_schedule_range(group_id, start_date, days=7):
+    """Расписание на диапазон дат (7 дней от указанной даты)"""
+    
+    # Получаем все доступные даты
+    all_dates = fetch_available_dates(group_id)
+    
+    # Вычисляем конечную дату
+    start_obj = datetime.strptime(start_date, "%Y-%m-%d")
+    end_obj = start_obj + timedelta(days=days-1)
+    end_date = end_obj.strftime("%Y-%m-%d")
+    
+    # Фильтруем даты в нужном диапазоне
+    target_dates = sorted([d for d in all_dates if start_date <= d <= end_date])
+    
+    if not target_dates:
+        return "📭 В указанном периоде занятий нет"
+    
+    result = f"📅 РАСПИСАНИЕ НА {days} ДНЕЙ\n"
+    result += f"📆 {start_obj.strftime('%d.%m')} – {end_obj.strftime('%d.%m.%Y')}\n"
+    result += "=" * 40 + "\n\n"
+    
+    # Для каждой даты получаем расписание
+    for date in target_dates:
+        # Получаем данные за конкретный день
+        data, error = fetch_schedule(group_id, date)
+        if error or not data:
+            result += f"❌ Ошибка загрузки {date}: {error}\n\n"
+            continue
+        
+        rasp_list = data.get("data", {}).get("rasp", [])
+        if not rasp_list:
+            continue
+        
+        # Форматируем заголовок дня
+        date_obj = datetime.strptime(date, "%Y-%m-%d")
+        weekday = get_weekday_rus(date_obj.weekday())
+        date_short = date_obj.strftime("%d.%m")
+        
+        result += f"📌 {weekday.upper()} ({date_short})\n"
+        result += "─" * 35 + "\n"
+        
+        # Сортируем занятия по времени начала
+        sorted_lessons = sorted(rasp_list, key=lambda x: x.get("начало", "00:00"))
+        
+        for lesson in sorted_lessons:
+            time_start = lesson.get("начало", "")
+            time_end = lesson.get("конец", "")
+            discipline = lesson.get("дисциплина", "")
+            teacher = lesson.get("преподаватель", "")
+            room = lesson.get("аудитория", "")
+            
+            # Очищаем дисциплину от префиксов
+            clean_discipline = discipline
+            lesson_type_short = ""
+            
+            if discipline.startswith("лек "):
+                clean_discipline = discipline[4:]
+                lesson_type_short = "ЛЕК"
+            elif discipline.startswith("пр "):
+                clean_discipline = discipline[3:]
+                lesson_type_short = "ПРАК"
+            elif discipline.startswith("лаб "):
+                clean_discipline = discipline[4:]
+                lesson_type_short = "ЛАБ"
+            
+            result += f"⏰ {time_start}–{time_end}"
+            if lesson_type_short:
+                result += f"  [{lesson_type_short}]"
+            result += f"\n   📚 {clean_discipline}\n"
+            result += f"   👨‍🏫 {teacher}  |  🏫 {room}\n\n"
         
         result += "\n"
     
@@ -478,6 +561,8 @@ def get_schedule_range_debug(group_id, start_date, days=7):
         result += "\n"
     
     return result
+
+
 # ========== ОБРАБОТЧИК КОМАНД ==========
 def handle_message(text, user_id):
     text_lower = text.lower().strip()
@@ -542,8 +627,7 @@ def handle_message(text, user_id):
     elif action == "next":
         return get_next_lesson(group_id)
     elif action == "week":
-        start_date = datetime.now().strftime("%Y-%m-%d")
-        return get_schedule_range(group_id, start_date, 7)
+        return get_schedule_for_current_week(group_id)
     elif action == "monday":
         return get_schedule(group_id, get_next_weekday(0))
     elif action == "tuesday":
