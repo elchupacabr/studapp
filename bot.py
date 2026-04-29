@@ -6,8 +6,8 @@ from functools import lru_cache
 import difflib
 
 # ========== НАСТРОЙКИ ==========
-VK_TOKEN = "ваш_токен_сообщества"
-GROUP_ID = 123456  # ID вашего VK сообщества
+VK_TOKEN = "vk1.a.dhQU8BDzoI-qxTFqJcZog2recEWuNW4uebV72GlVYYV6m-o9A_pzHBnA0w2YXqRHJSbEeroIvNBb0535Ie1y_eIBkWVencSd2xWLNgukIHOEp_17wAXS5VrQ8DB2m1Eon8Q4u2IpVsYooyBTyo57amz9fKPfIrOYZxOoeP6woo3f-8Guf-1v92fX3_E19oEqiQKjj_9gftJjp_CAnHXQ8A"
+GROUP_ID = 38232620  # ID вашего VK сообщества
 
 API_BASE_URL = "https://stud.sssu.ru/api/Rasp"
 API_DATES_URL = "https://stud.sssu.ru/api/GetRaspDates"
