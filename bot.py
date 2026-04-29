@@ -4,7 +4,55 @@ import vk_api
 from vk_api.bot_longpoll import VkBotLongPoll, VkBotEventType
 from functools import lru_cache
 import difflib
+import socket
+import os
+from threading import Thread
+from http.server import HTTPServer, BaseHTTPRequestHandler
 
+# ========== FIX ДЛЯ DNS ПРОБЛЕМ НА RENDER ==========
+# Используем IP, который вы нашли в API
+STUD_SSSU_IP = "89.16.96.207"
+STUD_SSSU_PORT = 443
+
+def force_stud_ip():
+    """Принудительно подменяем DNS для stud.sssu.ru"""
+    original_getaddrinfo = socket.getaddrinfo
+    
+    def patched_getaddrinfo(host, port, *args, **kwargs):
+        if host == "stud.sssu.ru":
+            print(f"🔧 DNS патч: {host} -> {STUD_SSSU_IP}:{port}")
+            # Возвращаем кортеж с подменённым IP
+            return [(socket.AF_INET, socket.SOCK_STREAM, 6, '', (STUD_SSSU_IP, port))]
+        return original_getaddrinfo(host, port, *args, **kwargs)
+    
+    socket.getaddrinfo = patched_getaddrinfo
+    print("✅ DNS патч для stud.sssu.ru активирован")
+
+# Применяем патч сразу при загрузке модуля
+force_stud_ip()
+
+# ========== HEALTHCHECK ДЛЯ RENDER ==========
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot is running")
+    
+    def log_message(self, format, *args):
+        # Отключаем лишний логгинг
+        pass
+
+def run_health_server():
+    port = int(os.environ.get("PORT", 10000))
+    server = HTTPServer(('0.0.0.0', port), HealthCheckHandler)
+    print(f"🏥 Health-check сервер запущен на порту {port}")
+    server.serve_forever()
+
+# Запускаем health-сервер в фоновом потоке
+Thread(target=run_health_server, daemon=True).start()
+
+# ========== ДАЛЬШЕ ВАШ ОСНОВНОЙ КОД ==========
+# ... (все остальные функции: get_schedule, fetch_available_dates и т.д.)
 # ========== НАСТРОЙКИ ==========
 VK_TOKEN = "vk1.a.dhQU8BDzoI-qxTFqJcZog2recEWuNW4uebV72GlVYYV6m-o9A_pzHBnA0w2YXqRHJSbEeroIvNBb0535Ie1y_eIBkWVencSd2xWLNgukIHOEp_17wAXS5VrQ8DB2m1Eon8Q4u2IpVsYooyBTyo57amz9fKPfIrOYZxOoeP6woo3f-8Guf-1v92fX3_E19oEqiQKjj_9gftJjp_CAnHXQ8A"
 GROUP_ID = 38232620  # ID вашего VK сообщества
