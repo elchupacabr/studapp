@@ -373,53 +373,72 @@ def get_next_lesson(group_id):
 
 def get_schedule_range(group_id, start_date, days=7):
     """Расписание на диапазон дат (полная версия)"""
-    dates = fetch_available_dates(group_id)
+    # Получаем все доступные даты с занятиями
+    all_dates = fetch_available_dates(group_id)
     
     # Вычисляем конечную дату
-    end_date = (datetime.strptime(start_date, "%Y-%m-%d") + timedelta(days=days-1)).strftime("%Y-%m-%d")
-    target_dates = [d for d in dates if start_date <= d <= end_date]
+    start_obj = datetime.strptime(start_date, "%Y-%m-%d")
+    end_obj = start_obj + timedelta(days=days-1)
+    end_date = end_obj.strftime("%Y-%m-%d")
+    
+    # Фильтруем даты в нужном диапазоне
+    target_dates = sorted([d for d in all_dates if start_date <= d <= end_date])
     
     if not target_dates:
         return "📭 В указанном периоде занятий нет"
     
-    # Определяем начало недели для заголовка
-    start_obj = datetime.strptime(start_date, "%Y-%m-%d")
-    end_obj = datetime.strptime(end_date, "%Y-%m-%d")
-    
+    # Формируем заголовок
     result = f"📅 РАСПИСАНИЕ НА НЕДЕЛЮ\n"
     result += f"📆 {start_obj.strftime('%d.%m')} – {end_obj.strftime('%d.%m.%Y')}\n"
     result += "=" * 40 + "\n\n"
     
+    # Для каждой даты получаем расписание
     for date in target_dates:
+        # Получаем данные за конкретный день
         data, error = fetch_schedule(group_id, date)
         if error or not data:
             continue
         
         rasp_list = data.get("data", {}).get("rasp", [])
-        if rasp_list:
-            date_obj = datetime.strptime(date, "%Y-%m-%d")
-            weekday = get_weekday_rus(date_obj.weekday())
-            date_short = date_obj.strftime("%d.%m")
+        if not rasp_list:
+            continue
+        
+        # Форматируем заголовок дня
+        date_obj = datetime.strptime(date, "%Y-%m-%d")
+        weekday = get_weekday_rus(date_obj.weekday())
+        date_short = date_obj.strftime("%d.%m")
+        
+        result += f"📌 {weekday.upper()} ({date_short})\n"
+        result += "─" * 35 + "\n"
+        
+        # Выводим все занятия за этот день, сортируя по времени
+        for lesson in sorted(rasp_list, key=lambda x: x.get("начало", "00:00")):
+            time_start = lesson.get("начало", "")
+            time_end = lesson.get("конец", "")
+            discipline = lesson.get("дисциплина", "")
+            teacher = lesson.get("преподаватель", "")
+            room = lesson.get("аудитория", "")
             
-            result += f"📌 {weekday.upper()} ({date_short})\n"
-            result += "─" * 30 + "\n"
+            lesson_type, clean_discipline = parse_lesson_type(discipline)
             
-            for lesson in rasp_list:
-                time_start = lesson.get("начало", "")
-                time_end = lesson.get("конец", "")
-                discipline = lesson.get("дисциплина", "")
-                teacher = lesson.get("преподаватель", "")
-                room = lesson.get("аудитория", "")
-                
-                lesson_type, clean_discipline = parse_lesson_type(discipline)
-                
-                result += f"⏰ {time_start}–{time_end}  "
-                if lesson_type:
-                    result += f"{lesson_type.split()[1]} "  # ЛЕКЦИЯ/ПРАКТИКА кратко
-                result += f"| {clean_discipline[:30]}\n"
-                result += f"   👨‍🏫 {teacher}  |  🏫 {room}\n"
+            # Формируем строку занятия
+            lesson_type_short = ""
+            if lesson_type:
+                # Берём краткое название (ЛЕКЦИЯ -> ЛЕК, ПРАКТИКА -> ПРАК)
+                if "ЛЕКЦИЯ" in lesson_type:
+                    lesson_type_short = "ЛЕК"
+                elif "ПРАКТИКА" in lesson_type:
+                    lesson_type_short = "ПРАК"
+                elif "ЛАБОРАТОРНАЯ" in lesson_type:
+                    lesson_type_short = "ЛАБ"
             
-            result += "\n"
+            result += f"⏰ {time_start}–{time_end}  "
+            if lesson_type_short:
+                result += f"{lesson_type_short} | "
+            result += f"{clean_discipline}\n"
+            result += f"   👨‍🏫 {teacher}  |  🏫 {room}\n"
+        
+        result += "\n"
     
     return result
 
