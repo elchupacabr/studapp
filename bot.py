@@ -550,6 +550,8 @@ def handle_message(text, user_id):
         return get_schedule_for_tomorrow(group_id)
     elif action == "next":
         return get_next_lesson(group_id)
+    elif action == "next_week":
+        return get_schedule_for_next_week(group_id)
     elif action == "week":
         return get_schedule_for_current_week(group_id)
     elif action == "monday":
