@@ -684,7 +684,7 @@ def handle_message(text, user_id, vk):
     if text == "❓ ПОМОЩЬ":
         user_group = get_user_group(user_id)
         help_text = (
-            "🤖 *Бот расписания СГУ*\n\n"
+            "🤖 *Тони Диспетчер - Бот с расписанием занятий*\n\n"
             f"📌 Группа: `{user_group['group_name']}`\n\n" if user_group else "❓ Группа не выбрана\n\n"
             "✨ *Что умеет бот:*\n\n"
             "**Основные команды:**\n"
@@ -757,7 +757,7 @@ def handle_message(text, user_id, vk):
     if text_lower in ["/start", "/help", "начать", "помощь", "start", "help"]:
         user_group = get_user_group(user_id)
         help_text = (
-            f"🤖 *Бот расписания СГУ*\n\n"
+            f"🤖 *Тони Диспетчер - Бот с расписанием занятий*\n\n"
             f"📌 Группа: `{user_group['group_name']}`\n\n" if user_group else "❓ Группа не выбрана\n\n"
             "✨ *Как пользоваться:*\n\n"
             "**Выбор группы:**\n"
@@ -852,7 +852,7 @@ def handle_message(text, user_id, vk):
 
 # ========== ЗАПУСК БОТА ==========
 def main():
-    print("🚀 Запуск бота расписания СГУ с клавиатурами")
+    print("🚀 Запуск бота расписания с клавиатурами")
     print("=" * 40)
     get_available_years()
     get_current_academic_year()
