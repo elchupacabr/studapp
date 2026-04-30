@@ -10,6 +10,58 @@ import json
 import re
 from threading import Thread
 from http.server import HTTPServer, BaseHTTPRequestHandler
+import threading
+import time
+import requests
+
+# ========== SELF-PING (бот сам себя будит) ==========
+
+def self_ping():
+    """Периодически пингует сам себя, чтобы Render не усыплял"""
+    while True:
+        try:
+            port = os.environ.get('PORT', 10000)
+            
+            # Пробуем разные варианты URL
+            urls_to_try = []
+            
+            # Вариант 1: через localhost (внутри контейнера)
+            urls_to_try.append(f"http://localhost:{port}")
+            
+            # Вариант 2: через внешний URL (если доступен на Render)
+            render_url = os.environ.get("RENDER_EXTERNAL_URL")
+            if render_url:
+                urls_to_try.append(f"{render_url}:{port}")
+            
+            # Вариант 3: через 127.0.0.1
+            urls_to_try.append(f"http://127.0.0.1:{port}")
+            
+            success = False
+            for url in urls_to_try:
+                try:
+                    response = requests.get(url, timeout=5)
+                    if response.status_code == 200:
+                        print(f"🔄 Self-ping OK: {url} - {datetime.now().strftime('%H:%M:%S')}")
+                        success = True
+                        break
+                except:
+                    continue
+            
+            if not success:
+                print(f"⚠️ Self-ping: все попытки не удались")
+                
+        except Exception as e:
+            print(f"⚠️ Self-ping ошибка: {e}")
+        
+        # Ждём 4 минуты (Render усыпляет через 15 минут бездействия)
+        time.sleep(240)
+
+def start_self_ping():
+    """Запускает self-ping в отдельном потоке"""
+    ping_thread = threading.Thread(target=self_ping, daemon=True)
+    ping_thread.start()
+    print("✅ Self-ping активирован (интервал: 4 минуты)")
+
 
 # ========== FIX ДЛЯ DNS ПРОБЛЕМ НА RENDER ==========
 STUD_SSSU_IP = "89.16.96.207"
@@ -496,6 +548,97 @@ def get_schedule_for_next_week(group_id):
         result += "\n"
     return result
 
+# ========== ПРОВЕРКА СТАТУСА САЙТА ==========
+
+def check_site_status():
+    """Проверяет доступность сайта stud.sssu.ru и его API"""
+    results = {
+        "site_reachable": False,
+        "api_reachable": False,
+        "response_time": None,
+        "error": None
+    }
+    
+    # Проверяем основную страницу
+    try:
+        start_time = datetime.now()
+        response = requests.get("https://stud.sssu.ru", timeout=10, allow_redirects=True)
+        results["response_time"] = int((datetime.now() - start_time).total_seconds() * 1000)
+        
+        if response.status_code == 200:
+            results["site_reachable"] = True
+        else:
+            results["error"] = f"HTTP {response.status_code}"
+    except requests.exceptions.Timeout:
+        results["error"] = "Таймаут (нет ответа 10 секунд)"
+    except requests.exceptions.ConnectionError:
+        results["error"] = "Ошибка соединения (сервер не отвечает)"
+    except Exception as e:
+        results["error"] = str(e)[:100]
+    
+    # Проверяем API (самый важный эндпоинт)
+    try:
+        response = requests.get(API_YEARS_URL, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            if data.get("state") == 1:
+                results["api_reachable"] = True
+            else:
+                results["api_reachable"] = False
+                results["error"] = f"API вернул ошибку: {data.get('msg', 'неизвестно')}"
+        else:
+            results["api_reachable"] = False
+    except Exception as e:
+        results["api_reachable"] = False
+        if not results["error"]:
+            results["error"] = str(e)[:100]
+    
+    return results
+
+def get_status_message():
+    """Форматирует сообщение о статусе сайта"""
+    status = check_site_status()
+    
+    result = "🖥️ **СТАТУС СЕРВЕРА stud.sssu.ru**\n"
+    result += "=" * 35 + "\n\n"
+    
+    # Основной сайт
+    if status["site_reachable"]:
+        result += "✅ **Основной сайт:** Доступен\n"
+        if status["response_time"]:
+            result += f"   ⏱️ Время ответа: {status['response_time']} мс\n"
+    else:
+        result += "❌ **Основной сайт:** НЕ ДОСТУПЕН\n"
+    
+    # API
+    if status["api_reachable"]:
+        result += "✅ **API расписания:** Работает\n"
+        result += "   📡 Бот может получать расписание\n"
+    else:
+        result += "❌ **API расписания:** НЕ РАБОТАЕТ\n"
+        result += "   ⚠️ Бот не может получить расписание\n"
+    
+    # Если есть ошибка
+    if status["error"]:
+        result += f"\n⚠️ **Детали ошибки:**\n   {status['error']}\n"
+    
+    # Рекомендации
+    result += "\n💡 **Рекомендации:**\n"
+    if not status["api_reachable"]:
+        result += "   • Проверьте подключение к интернету\n"
+        result += "   • Сайт может быть на техническом обслуживании\n"
+        result += "   • Попробуйте позже\n"
+    elif not status["site_reachable"] and not status["api_reachable"]:
+        result += "   • Вероятно, сервер университета не работает\n"
+        result += "   • Попробуйте зайти на сайт вручную\n"
+    else:
+        result += "   • Всё работает, можно пользоваться!\n"
+    
+    result += f"\n🕐 Проверено: {datetime.now().strftime('%H:%M:%S')}"
+    
+    return result
+
+
 # ========== КЛАВИАТУРЫ ДЛЯ КНОПОК ==========
 
 def get_main_keyboard(user_has_group=False):
@@ -697,7 +840,7 @@ def handle_message(text, user_id, peer_id, from_chat, vk):
             send_keyboard(vk, peer_id, "❓ Группа не выбрана. Нажмите `📚 ВЫБРАТЬ ГРУППУ`", get_main_keyboard(user_has_group=False))
         return
     
-    if text == "❓ ПОМОЩЬ":
+       if text == "❓ ПОМОЩЬ":
         user_group = get_user_group(user_id)
         help_text = (
             "🤖 *Тони Диспетчер - Бот с расписанием*\n\n"
@@ -707,13 +850,15 @@ def handle_message(text, user_id, peer_id, from_chat, vk):
             "• 📅 РАСПИСАНИЕ - сегодня\n"
             "• 📆 НЕДЕЛЯ - текущая неделя\n"
             "• ⏩ СЛЕДУЮЩАЯ НЕДЕЛЯ\n"
-            "• 🎯 БЛИЖАЙШЕЕ - следующая пара\n\n"
+            "• 🎯 БЛИЖАЙШЕЕ - следующая пара\n"
+            "• 🖥️ СТАТУС - проверить сайт\n\n"  # <-- ДОБАВИТЬ ЭТУ СТРОКУ
             "**Управление группой:**\n"
             "• 📚 ВЫБРАТЬ ГРУППУ - ввести название\n"
             "• 🔍 ПОИСК ГРУППЫ - по ключевому слову\n"
-            "• 📋 ВСЕ ГРУППЫ - список\n"
+            "• 📋 ВСЕ ГРППЫ - список\n"
             "• 🏫 МОЯ ГРУППА - посмотреть\n\n"
-            "💡 *Совет:* Можно писать текстом: `завтра иктс тб31`"
+            "💡 *Совет:* Можно писать текстом: `завтра иктс тб31`\n"
+            "🖥️ Или `статус` - проверить работу сервера"
         )
         send_keyboard(vk, peer_id, help_text, get_main_keyboard(user_has_group=bool(user_group)))
         return
@@ -768,6 +913,13 @@ def handle_message(text, user_id, peer_id, from_chat, vk):
         else:
             send_keyboard(vk, peer_id, "❓ Группа не выбрана", get_main_keyboard(user_has_group=False))
         return
+
+        # Команда "статус" - проверка сайта
+    if text_lower == "статус" or text_lower == "статус сайта" or text_lower == "проверка":
+        answer = get_status_message()
+        send_keyboard(vk, peer_id, answer, get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
+        return
+
     
     # Помощь текстом
     if text_lower in ["/start", "/help", "начать", "помощь", "start", "help"]:
@@ -868,11 +1020,18 @@ def handle_message(text, user_id, peer_id, from_chat, vk):
 
 # ========== ЗАПУСК БОТА ==========
 def main():
-    print("🚀 Запуск бота расписания СГУ (с поддержкой чатов)")
+    print("🚀 Запуск бота расписания СГУ")
     print("=" * 40)
+    
+    # Запускаем self-ping (бот сам себя будит)
+    start_self_ping()
+    
+    # Остальная инициализация
     get_available_years()
     get_current_academic_year()
     get_all_groups()
+    
+    # ... остальной код main()
     
     vk_session = vk_api.VkApi(token=VK_TOKEN)
     vk = vk_session.get_api()
