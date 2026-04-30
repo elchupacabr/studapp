@@ -839,8 +839,9 @@ def handle_message(text, user_id, peer_id, from_chat, vk):
         else:
             send_keyboard(vk, peer_id, "❓ Группа не выбрана. Нажмите `📚 ВЫБРАТЬ ГРУППУ`", get_main_keyboard(user_has_group=False))
         return
+
     
-       if text == "❓ ПОМОЩЬ":
+    if text == "❓ ПОМОЩЬ":
         user_group = get_user_group(user_id)
         help_text = (
             "🤖 *Тони Диспетчер - Бот с расписанием*\n\n"
