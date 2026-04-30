@@ -7,6 +7,7 @@ import difflib
 import socket
 import os
 import json
+import re
 from threading import Thread
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
@@ -557,19 +558,34 @@ def get_after_select_keyboard(group_name):
         ]
     }
 
-def send_keyboard(vk, user_id, message, keyboard):
+def send_keyboard(vk, peer_id, message, keyboard):
+    """Отправляет сообщение с клавиатурой (работает и в ЛС, и в чатах)"""
     vk.messages.send(
-        user_id=user_id,
+        peer_id=peer_id,
         message=message,
         random_id=0,
         keyboard=json.dumps(keyboard, ensure_ascii=False)
     )
 
-# ========== ОБРАБОТЧИК КОМАНД (ОБЪЕДИНЁННЫЙ) ==========
+def send_message(vk, peer_id, message):
+    """Отправляет обычное сообщение без клавиатуры"""
+    vk.messages.send(
+        peer_id=peer_id,
+        message=message,
+        random_id=0
+    )
+
+# ========== ОБРАБОТЧИК КОМАНД (ДЛЯ ЧАТОВ И ЛС) ==========
 
 user_states = {}
 
-def handle_message(text, user_id, vk):
+def handle_message(text, user_id, peer_id, from_chat, vk):
+    """
+    Обрабатывает сообщение
+    user_id - ID отправителя (всегда человек)
+    peer_id - куда отвечать (ЛС или чат)
+    from_chat - True если сообщение из чата
+    """
     text_lower = text.lower().strip()
     user_id_str = str(user_id)
     
@@ -588,12 +604,12 @@ def handle_message(text, user_id, vk):
                     if len(results) > 10:
                         message += f"\n... и ещё {len(results) - 10} групп"
                     message += f"\n\n💡 Напишите полное название группы для выбора"
-                    send_keyboard(vk, user_id, message, get_search_keyboard())
+                    send_keyboard(vk, peer_id, message, get_search_keyboard())
                 else:
-                    send_keyboard(vk, user_id, f"❌ По запросу `{keyword}` ничего не найдено", get_search_keyboard())
+                    send_keyboard(vk, peer_id, f"❌ По запросу `{keyword}` ничего не найдено", get_search_keyboard())
                 del user_states[user_id_str]
             else:
-                send_keyboard(vk, user_id, "❓ Введите текст для поиска", get_search_keyboard())
+                send_keyboard(vk, peer_id, "❓ Введите текст для поиска", get_search_keyboard())
             return
         
         elif state.get("mode") == "waiting_for_group":
@@ -601,90 +617,90 @@ def handle_message(text, user_id, vk):
             group_id, found_name, suggestions = find_group_by_name(group_name)
             if group_id:
                 user_states[user_id_str] = {"mode": "confirm_group", "group_id": group_id, "group_name": found_name}
-                send_keyboard(vk, user_id, f"📌 Выбрана группа: `{found_name}`\n\n✅ Подтвердите выбор:", get_after_select_keyboard(found_name))
+                send_keyboard(vk, peer_id, f"📌 Выбрана группа: `{found_name}`\n\n✅ Подтвердите выбор:", get_after_select_keyboard(found_name))
             else:
                 if suggestions:
                     msg = f"❌ Группа `{group_name}` не найдена.\n\n🤔 Возможно, вы имели в виду:\n" + "\n".join([f"• {s}" for s in suggestions[:5]])
-                    send_keyboard(vk, user_id, msg, get_search_keyboard())
+                    send_keyboard(vk, peer_id, msg, get_search_keyboard())
                 else:
-                    send_keyboard(vk, user_id, f"❌ Группа `{group_name}` не найдена.\nПопробуйте `📚 ВСЕ ГРУППЫ`", get_search_keyboard())
+                    send_keyboard(vk, peer_id, f"❌ Группа `{group_name}` не найдена.\nПопробуйте `📚 ВСЕ ГРУППЫ`", get_search_keyboard())
             return
         
         elif state.get("mode") == "confirm_group":
             if "да, эта" in text_lower or "подтверждаю" in text_lower:
                 set_user_group(user_id, state["group_id"], state["group_name"])
                 del user_states[user_id_str]
-                send_keyboard(vk, user_id, f"✅ Группа `{state['group_name']}` сохранена!\n\nТеперь вы можете пользоваться кнопками:", get_main_keyboard(user_has_group=True))
+                send_keyboard(vk, peer_id, f"✅ Группа `{state['group_name']}` сохранена!\n\nТеперь вы можете пользоваться кнопками:", get_main_keyboard(user_has_group=True))
             else:
                 del user_states[user_id_str]
-                send_keyboard(vk, user_id, "❌ Выбор отменён", get_main_keyboard(user_has_group=False))
+                send_keyboard(vk, peer_id, "❌ Выбор отменён", get_main_keyboard(user_has_group=False))
             return
     
     # ===== ОБРАБОТКА КНОПОК =====
     
     if text == "📚 ВЫБРАТЬ ГРУППУ" or text == "🔍 ВЫБРАТЬ ДРУГУЮ":
         user_states[user_id_str] = {"mode": "waiting_for_group"}
-        send_keyboard(vk, user_id, "📝 Напишите название группы (например: `иктс тб31`)", get_search_keyboard())
+        send_keyboard(vk, peer_id, "📝 Напишите название группы (например: `иктс тб31`)", get_search_keyboard())
         return
     
     if text == "🔍 ПОИСК ГРУППЫ":
         user_states[user_id_str] = {"mode": "search_groups"}
-        send_keyboard(vk, user_id, "🔍 Введите ключевое слово для поиска группы", get_search_keyboard())
+        send_keyboard(vk, peer_id, "🔍 Введите ключевое слово для поиска группы", get_search_keyboard())
         return
     
     if text == "📚 ВСЕ ГРУППЫ" or text == "📋 ВСЕ ГРУППЫ":
         message = get_groups_list_message(1)
-        send_keyboard(vk, user_id, message, get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
+        send_keyboard(vk, peer_id, message, get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
         return
     
     if text == "📅 РАСПИСАНИЕ":
         user_group = get_user_group(user_id)
         if user_group:
             answer = get_schedule_for_today(user_group['group_id'])
-            send_keyboard(vk, user_id, answer, get_main_keyboard(user_has_group=True))
+            send_keyboard(vk, peer_id, answer, get_main_keyboard(user_has_group=True))
         else:
-            send_keyboard(vk, user_id, "❓ Сначала выберите группу!", get_main_keyboard(user_has_group=False))
+            send_keyboard(vk, peer_id, "❓ Сначала выберите группу!", get_main_keyboard(user_has_group=False))
         return
     
     if text == "📆 НЕДЕЛЯ":
         user_group = get_user_group(user_id)
         if user_group:
             answer = get_schedule_for_current_week(user_group['group_id'])
-            send_keyboard(vk, user_id, answer, get_main_keyboard(user_has_group=True))
+            send_keyboard(vk, peer_id, answer, get_main_keyboard(user_has_group=True))
         else:
-            send_keyboard(vk, user_id, "❓ Сначала выберите группу!", get_main_keyboard(user_has_group=False))
+            send_keyboard(vk, peer_id, "❓ Сначала выберите группу!", get_main_keyboard(user_has_group=False))
         return
     
     if text == "⏩ СЛЕДУЮЩАЯ НЕДЕЛЯ":
         user_group = get_user_group(user_id)
         if user_group:
             answer = get_schedule_for_next_week(user_group['group_id'])
-            send_keyboard(vk, user_id, answer, get_main_keyboard(user_has_group=True))
+            send_keyboard(vk, peer_id, answer, get_main_keyboard(user_has_group=True))
         else:
-            send_keyboard(vk, user_id, "❓ Сначала выберите группу!", get_main_keyboard(user_has_group=False))
+            send_keyboard(vk, peer_id, "❓ Сначала выберите группу!", get_main_keyboard(user_has_group=False))
         return
     
     if text == "🎯 БЛИЖАЙШЕЕ":
         user_group = get_user_group(user_id)
         if user_group:
             answer = get_next_lesson(user_group['group_id'])
-            send_keyboard(vk, user_id, answer, get_main_keyboard(user_has_group=True))
+            send_keyboard(vk, peer_id, answer, get_main_keyboard(user_has_group=True))
         else:
-            send_keyboard(vk, user_id, "❓ Сначала выберите группу!", get_main_keyboard(user_has_group=False))
+            send_keyboard(vk, peer_id, "❓ Сначала выберите группу!", get_main_keyboard(user_has_group=False))
         return
     
     if text == "🏫 МОЯ ГРУППА":
         user_group = get_user_group(user_id)
         if user_group:
-            send_keyboard(vk, user_id, f"📌 Ваша группа: `{user_group['group_name']}`", get_main_keyboard(user_has_group=True))
+            send_keyboard(vk, peer_id, f"📌 Ваша группа: `{user_group['group_name']}`", get_main_keyboard(user_has_group=True))
         else:
-            send_keyboard(vk, user_id, "❓ Группа не выбрана. Нажмите `📚 ВЫБРАТЬ ГРУППУ`", get_main_keyboard(user_has_group=False))
+            send_keyboard(vk, peer_id, "❓ Группа не выбрана. Нажмите `📚 ВЫБРАТЬ ГРУППУ`", get_main_keyboard(user_has_group=False))
         return
     
     if text == "❓ ПОМОЩЬ":
         user_group = get_user_group(user_id)
         help_text = (
-            "🤖 *Тони Диспетчер - Бот с расписанием занятий*\n\n"
+            "🤖 *Бот расписания СГУ*\n\n"
             f"📌 Группа: `{user_group['group_name']}`\n\n" if user_group else "❓ Группа не выбрана\n\n"
             "✨ *Что умеет бот:*\n\n"
             "**Основные команды:**\n"
@@ -699,22 +715,22 @@ def handle_message(text, user_id, vk):
             "• 🏫 МОЯ ГРУППА - посмотреть\n\n"
             "💡 *Совет:* Можно писать текстом: `завтра иктс тб31`"
         )
-        send_keyboard(vk, user_id, help_text, get_main_keyboard(user_has_group=bool(user_group)))
+        send_keyboard(vk, peer_id, help_text, get_main_keyboard(user_has_group=bool(user_group)))
         return
     
     if text == "❌ ОТМЕНА":
         if user_id_str in user_states:
             del user_states[user_id_str]
         user_group = get_user_group(user_id)
-        send_keyboard(vk, user_id, "✅ Действие отменено", get_main_keyboard(user_has_group=bool(user_group)))
+        send_keyboard(vk, peer_id, "✅ Действие отменено", get_main_keyboard(user_has_group=bool(user_group)))
         return
     
-    # ===== ТЕКСТОВЫЕ КОМАНДЫ (старый обработчик) =====
+    # ===== ТЕКСТОВЫЕ КОМАНДЫ =====
     
     # Команда "группы"
     if text_lower == "группы" or text_lower == "список групп":
         answer = get_groups_list_message(1)
-        send_keyboard(vk, user_id, answer, get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
+        send_keyboard(vk, peer_id, answer, get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
         return
     
     # Поиск "найди XXX"
@@ -722,9 +738,9 @@ def handle_message(text, user_id, vk):
         keyword = text_lower.replace("найди ", "").replace("поиск ", "").strip()
         if keyword:
             answer = search_groups_message(keyword)
-            send_keyboard(vk, user_id, answer, get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
+            send_keyboard(vk, peer_id, answer, get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
         else:
-            send_keyboard(vk, user_id, "❓ Напишите, что искать", get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
+            send_keyboard(vk, peer_id, "❓ Напишите, что искать", get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
         return
     
     # Выбор группы "выбрать XXX"
@@ -734,30 +750,30 @@ def handle_message(text, user_id, vk):
             group_id, found_name, suggestions = find_group_by_name(group_name)
             if group_id:
                 set_user_group(user_id, group_id, found_name)
-                send_keyboard(vk, user_id, f"✅ Группа `{found_name}` сохранена!", get_main_keyboard(user_has_group=True))
+                send_keyboard(vk, peer_id, f"✅ Группа `{found_name}` сохранена!", get_main_keyboard(user_has_group=True))
             else:
                 if suggestions:
-                    send_keyboard(vk, user_id, f"❌ Группа `{group_name}` не найдена.\n\n🤔 Возможно: {', '.join(suggestions[:3])}", get_main_keyboard(user_has_group=False))
+                    send_keyboard(vk, peer_id, f"❌ Группа `{group_name}` не найдена.\n\n🤔 Возможно: {', '.join(suggestions[:3])}", get_main_keyboard(user_has_group=False))
                 else:
-                    send_keyboard(vk, user_id, f"❌ Группа `{group_name}` не найдена", get_main_keyboard(user_has_group=False))
+                    send_keyboard(vk, peer_id, f"❌ Группа `{group_name}` не найдена", get_main_keyboard(user_has_group=False))
         else:
-            send_keyboard(vk, user_id, "❓ Напишите название группы", get_main_keyboard(user_has_group=False))
+            send_keyboard(vk, peer_id, "❓ Напишите название группы", get_main_keyboard(user_has_group=False))
         return
     
     # Моя группа
     if text_lower == "моя группа" or text_lower == "моя группа?":
         user_group = get_user_group(user_id)
         if user_group:
-            send_keyboard(vk, user_id, f"📌 Ваша группа: `{user_group['group_name']}`", get_main_keyboard(user_has_group=True))
+            send_keyboard(vk, peer_id, f"📌 Ваша группа: `{user_group['group_name']}`", get_main_keyboard(user_has_group=True))
         else:
-            send_keyboard(vk, user_id, "❓ Группа не выбрана", get_main_keyboard(user_has_group=False))
+            send_keyboard(vk, peer_id, "❓ Группа не выбрана", get_main_keyboard(user_has_group=False))
         return
     
     # Помощь текстом
     if text_lower in ["/start", "/help", "начать", "помощь", "start", "help"]:
         user_group = get_user_group(user_id)
         help_text = (
-            f"🤖 *Тони Диспетчер - Бот с расписанием занятий*\n\n"
+            f"🤖 *Бот расписания СГУ*\n\n"
             f"📌 Группа: `{user_group['group_name']}`\n\n" if user_group else "❓ Группа не выбрана\n\n"
             "✨ *Как пользоваться:*\n\n"
             "**Выбор группы:**\n"
@@ -772,7 +788,7 @@ def handle_message(text, user_id, vk):
             "• `следующее` - ближайшее занятие\n\n"
             "💡 *Совет:* Используйте кнопки для быстрого доступа!"
         )
-        send_keyboard(vk, user_id, help_text, get_main_keyboard(user_has_group=bool(user_group)))
+        send_keyboard(vk, peer_id, help_text, get_main_keyboard(user_has_group=bool(user_group)))
         return
     
     # Команды с указанием группы (неделя иктс тб31, завтра иктс тб31 и т.д.)
@@ -783,7 +799,7 @@ def handle_message(text, user_id, vk):
         action = "next_week"
     elif any(word in text_lower for word in ["завтра", "tomorrow"]):
         action = "tomorrow"
-    elif any(word in text_lower for word in ["следующее", "ближайшее", "next"]):
+    elif any(word in text_lower for word in ["следующее", "ближайщее", "след", "next"]):
         action = "next"
     elif any(word in text_lower for word in ["неделя", "week"]):
         action = "week"
@@ -801,7 +817,7 @@ def handle_message(text, user_id, vk):
     # Извлекаем название группы
     query_for_group = text_lower
     action_words = [
-        "завтра", "tomorrow", "следующее", "ближайшее", "next",
+        "завтра", "tomorrow", "следующее", "ближайщее", "след",
         "неделя", "week", "пн", "понедельник", "вт", "вторник",
         "ср", "среда", "чт", "четверг", "пт", "пятница",
         "следующая неделя", "следущая неделя", "след неделя", 
@@ -814,15 +830,15 @@ def handle_message(text, user_id, vk):
         group_id, group_name, suggestions = find_group_by_name(query_for_group)
         if not group_id:
             if suggestions:
-                send_keyboard(vk, user_id, f"❌ Группа не найдена.\n\n🤔 Возможно: {', '.join(suggestions[:3])}", get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
+                send_keyboard(vk, peer_id, f"❌ Группа не найдена.\n\n🤔 Возможно: {', '.join(suggestions[:3])}", get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
             else:
-                send_keyboard(vk, user_id, f"❌ Группа `{query_for_group}` не найдена", get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
+                send_keyboard(vk, peer_id, f"❌ Группа `{query_for_group}` не найдена", get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
             return
         set_user_group(user_id, group_id, group_name)
     else:
         user_group = get_user_group(user_id)
         if not user_group:
-            send_keyboard(vk, user_id, "❓ У вас не выбрана группа.\n\nНажмите `📚 ВЫБРАТЬ ГРУППУ`", get_main_keyboard(user_has_group=False))
+            send_keyboard(vk, peer_id, "❓ У вас не выбрана группа.\n\nНажмите `📚 ВЫБРАТЬ ГРУППУ`", get_main_keyboard(user_has_group=False))
             return
         group_id = user_group['group_id']
     
@@ -848,11 +864,11 @@ def handle_message(text, user_id, vk):
     else:
         answer = get_schedule_for_today(group_id)
     
-    send_keyboard(vk, user_id, answer, get_main_keyboard(user_has_group=True))
+    send_keyboard(vk, peer_id, answer, get_main_keyboard(user_has_group=True))
 
 # ========== ЗАПУСК БОТА ==========
 def main():
-    print("🚀 Запуск бота расписания с клавиатурами")
+    print("🚀 Запуск бота расписания СГУ (с поддержкой чатов)")
     print("=" * 40)
     get_available_years()
     get_current_academic_year()
@@ -864,11 +880,11 @@ def main():
     
     print("🤖 Бот готов к работе!")
     print("📡 Функции:")
+    print("   - Работа в личных сообщениях и чатах")
     print("   - Клавиатуры с кнопками")
-    print("   - Запоминание группы")
+    print("   - Запоминание группы для каждого пользователя")
     print("   - Список всех групп")
     print("   - Поиск групп")
-    print("   - Текстовые команды")
     print("=" * 40)
     
     for event in longpoll.listen():
@@ -876,9 +892,23 @@ def main():
             user_message = event.obj.message['text']
             user_id = event.obj.message['from_id']
             
-            handle_message(user_message, user_id, vk)
+            # Определяем, откуда пришло сообщение
+            if event.from_chat:
+                # Сообщение из беседы
+                peer_id = 2000000000 + event.chat_id
+                from_chat = True
+                # Игнорируем служебные сообщения от самого бота
+                if user_id < 0:
+                    continue
+                print(f"📨 Чат {event.chat_id} от {user_id}: {user_message[:50]}...")
+            else:
+                # Личное сообщение
+                peer_id = user_id
+                from_chat = False
+                print(f"📨 ЛС от {user_id}: {user_message[:50]}...")
             
-            print(f"📨 Обработано сообщение от {user_id}: {user_message[:50]}...")
+            # Обрабатываем сообщение
+            handle_message(user_message, user_id, peer_id, from_chat, vk)
 
 if __name__ == "__main__":
     main()
