@@ -246,9 +246,21 @@ def fetch_schedule(group_id, date):
         if data.get("state") != 1:
             return None, f"❌ Ошибка: {data.get('msg', 'Неизвестная ошибка')}"
         
-        return data, None
+        # ВАЖНО: фильтруем занятия только за запрошенную дату
+        # API иногда возвращает занятия за другие дни
+        rasp_list = data.get("data", {}).get("rasp", [])
+        filtered_rasp = [lesson for lesson in rasp_list if lesson.get("дата", "")[:10] == date]
+        
+        # Создаём копию данных с отфильтрованным расписанием
+        filtered_data = data.copy()
+        filtered_data["data"] = data["data"].copy()
+        filtered_data["data"]["rasp"] = filtered_rasp
+        
+        return filtered_data, None
     except requests.exceptions.RequestException as e:
         return None, f"❌ Ошибка соединения: {str(e)}"
+
+
 
 # ========== ФОРМАТИРОВАНИЕ РАСПИСАНИЯ ==========
 def get_weekday_rus(weekday):
@@ -410,8 +422,12 @@ def get_schedule_for_current_week(group_id):
         if error or not data:
             continue
         
+        # БЕРЁМ ТОЛЬКО ЗАНЯТИЯ ЗА ЭТУ КОНКРЕТНУЮ ДАТУ
         rasp_list = data.get("data", {}).get("rasp", [])
-        if not rasp_list:
+        # Дополнительная фильтрация по полю "дата" (на случай, если API врёт)
+        day_lessons = [lesson for lesson in rasp_list if lesson.get("дата", "").startswith(date)]
+        
+        if not day_lessons:
             continue
         
         # Форматируем заголовок дня
@@ -423,7 +439,7 @@ def get_schedule_for_current_week(group_id):
         result += "─" * 35 + "\n"
         
         # Сортируем занятия по времени начала
-        sorted_lessons = sorted(rasp_list, key=lambda x: x.get("начало", "00:00"))
+        sorted_lessons = sorted(day_lessons, key=lambda x: x.get("начало", "00:00"))
         
         for lesson in sorted_lessons:
             time_start = lesson.get("начало", "")
