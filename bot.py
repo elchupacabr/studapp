@@ -277,6 +277,90 @@ def get_next_weekday(target_weekday):
     if days_ahead <= 0:
         days_ahead += 7
     return (today + timedelta(days=days_ahead)).strftime("%Y-%m-%d")
+    
+def get_next_week_range():
+    """Возвращает даты понедельника и воскресенья СЛЕДУЮЩЕЙ недели"""
+    today = datetime.now()
+    # Понедельник текущей недели
+    current_monday = today - timedelta(days=today.weekday())
+    # Понедельник следующей недели
+    next_monday = current_monday + timedelta(days=7)
+    # Воскресенье следующей недели
+    next_sunday = next_monday + timedelta(days=6)
+    return next_monday.strftime("%Y-%m-%d"), next_sunday.strftime("%Y-%m-%d")
+
+def get_schedule_for_next_week(group_id):
+    """Расписание на следующую неделю"""
+    start_date, end_date = get_next_week_range()
+    
+    # Получаем все доступные даты с занятиями
+    all_dates = fetch_available_dates(group_id)
+    
+    # Фильтруем даты в диапазоне следующей недели
+    target_dates = sorted([d for d in all_dates if start_date <= d <= end_date])
+    
+    if not target_dates:
+        start_obj = datetime.strptime(start_date, "%Y-%m-%d")
+        end_obj = datetime.strptime(end_date, "%Y-%m-%d")
+        return f"📭 На следующей неделе ({start_obj.strftime('%d.%m')}–{end_obj.strftime('%d.%m')}) занятий нет"
+    
+    # Формируем заголовок
+    start_obj = datetime.strptime(start_date, "%Y-%m-%d")
+    end_obj = datetime.strptime(end_date, "%Y-%m-%d")
+    
+    result = f"📅 РАСПИСАНИЕ НА СЛЕДУЮЩУЮ НЕДЕЛЮ\n"
+    result += f"📆 {start_obj.strftime('%d.%m')} – {end_obj.strftime('%d.%m.%Y')}\n"
+    result += "=" * 40 + "\n\n"
+    
+    # Для каждой даты получаем расписание
+    for date in target_dates:
+        data, error = fetch_schedule(group_id, date)
+        if error or not data:
+            continue
+        
+        rasp_list = data.get("data", {}).get("rasp", [])
+        if not rasp_list:
+            continue
+        
+        date_obj = datetime.strptime(date, "%Y-%m-%d")
+        weekday = get_weekday_rus(date_obj.weekday())
+        date_short = date_obj.strftime("%d.%m")
+        
+        result += f"📌 {weekday.upper()} ({date_short})\n"
+        result += "─" * 35 + "\n"
+        
+        sorted_lessons = sorted(rasp_list, key=lambda x: x.get("начало", "00:00"))
+        
+        for lesson in sorted_lessons:
+            time_start = lesson.get("начало", "")
+            time_end = lesson.get("конец", "")
+            discipline = lesson.get("дисциплина", "")
+            teacher = lesson.get("преподаватель", "")
+            room = lesson.get("аудитория", "")
+            
+            clean_discipline = discipline
+            lesson_type_short = ""
+            
+            if discipline.startswith("лек "):
+                clean_discipline = discipline[4:]
+                lesson_type_short = "ЛЕК"
+            elif discipline.startswith("пр "):
+                clean_discipline = discipline[3:]
+                lesson_type_short = "ПРАК"
+            elif discipline.startswith("лаб "):
+                clean_discipline = discipline[4:]
+                lesson_type_short = "ЛАБ"
+            
+            result += f"⏰ {time_start}–{time_end}"
+            if lesson_type_short:
+                result += f"  [{lesson_type_short}]"
+            result += f"\n   📚 {clean_discipline}\n"
+            result += f"   👨‍🏫 {teacher}  |  🏫 {room}\n\n"
+        
+        result += "\n"
+    
+    return result
+
 
 def get_next_lesson(group_id):
     next_date = get_next_lesson_date(group_id)
@@ -430,11 +514,13 @@ def handle_message(text, user_id):
             f"📚 *Доступные учебные годы:* {', '.join(get_available_years())}\n\n"
             f"💡 *Совет:* можно писать название группы не полностью"
         )
-    action = "today"
+        action = "today"
     if any(word in text_lower for word in ["завтра", "tomorrow"]):
         action = "tomorrow"
     elif any(word in text_lower for word in ["следующее", "ближайшее", "next"]):
         action = "next"
+    elif "следующая неделя" in text_lower or "след неделя" in text_lower or "next week" in text_lower:
+        action = "next_week"
     elif any(word in text_lower for word in ["неделя", "week"]):
         action = "week"
     elif any(word in text_lower for word in ["пн", "понедельник"]):
