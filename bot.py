@@ -14,54 +14,80 @@ import threading
 import time
 import requests
 
-# ========== SELF-PING (бот сам себя будит) ==========
+# ========== ПРОДВИНУТЫЙ SELF-PING (с эмуляцией браузера) ==========
 
-def self_ping():
-    """Периодически пингует сам себя, чтобы Render не усыплял"""
+def self_ping_advanced():
+    """Продвинутый self-ping с эмуляцией браузера и случайными интервалами"""
+    import random
+    
+    # User-Agent'ы разных браузеров для имитации реальных пользователей
+    user_agents = [
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Safari/537.36",
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/119.0.0.0",
+        "Mozilla/5.0 (Windows NT 10.0; rv:109.0) Gecko/20100101 Firefox/119.0"
+    ]
+    
     while True:
         try:
             port = os.environ.get('PORT', 10000)
-            
-            # Пробуем разные варианты URL
-            urls_to_try = []
-            
-            # Вариант 1: через localhost (внутри контейнера)
-            urls_to_try.append(f"http://localhost:{port}")
-            
-            # Вариант 2: через внешний URL (если доступен на Render)
             render_url = os.environ.get("RENDER_EXTERNAL_URL")
-            if render_url:
-                urls_to_try.append(f"{render_url}:{port}")
             
-            # Вариант 3: через 127.0.0.1
-            urls_to_try.append(f"http://127.0.0.1:{port}")
+            if not render_url:
+                time.sleep(60)
+                continue
             
-            success = False
-            for url in urls_to_try:
+            # Случайный User-Agent
+            user_agent = random.choice(user_agents)
+            headers = {
+                'User-Agent': user_agent,
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'ru-RU,ru;q=0.8,en-US;q=0.5,en;q=0.3',
+                'Accept-Encoding': 'gzip, deflate',
+                'Connection': 'keep-alive'
+            }
+            
+            # Разные URL для обхода
+            urls_to_visit = [
+                f"{render_url}/",
+                f"{render_url}/health",
+                f"{render_url}/status",
+                f"{render_url}/ping",
+            ]
+            
+            print(f"🌐 Начинаю обход сайта... (User-Agent: {user_agent[:50]}...)")
+            
+            for url in urls_to_visit:
                 try:
-                    response = requests.get(url, timeout=5)
+                    start_time = time.time()
+                    response = requests.get(url, headers=headers, timeout=15)
+                    elapsed = int((time.time() - start_time) * 1000)
+                    
                     if response.status_code == 200:
-                        print(f"🔄 Self-ping OK: {url} - {datetime.now().strftime('%H:%M:%S')}")
-                        success = True
-                        break
-                except:
-                    continue
+                        print(f"   ✅ {url} → {response.status_code} ({elapsed}ms)")
+                    else:
+                        print(f"   ⚠️ {url} → {response.status_code}")
+                    
+                    # Случайная пауза между запросами (1-3 секунды)
+                    time.sleep(random.uniform(1, 3))
+                    
+                except Exception as e:
+                    print(f"   ❌ {url} → {str(e)[:50]}")
             
-            if not success:
-                print(f"⚠️ Self-ping: все попытки не удались")
-                
+            # Случайная пауза между циклами (10-15 минут)
+            wait_time = random.randint(600, 900)  # 10-15 минут
+            print(f"💤 Обход завершён. Следующий через {wait_time // 60} минут")
+            time.sleep(wait_time)
+            
         except Exception as e:
             print(f"⚠️ Self-ping ошибка: {e}")
-        
-        # Ждём 4 минуты (Render усыпляет через 15 минут бездействия)
-        time.sleep(240)
+            time.sleep(300)
 
 def start_self_ping():
-    """Запускает self-ping в отдельном потоке"""
-    ping_thread = threading.Thread(target=self_ping, daemon=True)
+    """Запускает продвинутый self-ping в отдельном потоке"""
+    ping_thread = threading.Thread(target=self_ping_advanced, daemon=True)
     ping_thread.start()
-    print("✅ Self-ping активирован (интервал: 4 минуты)")
-
+    print("✅ Self-ping активирован (продвинутый режим, обход страниц)")
 
 # ========== FIX ДЛЯ DNS ПРОБЛЕМ НА RENDER ==========
 STUD_SSSU_IP = "89.16.96.207"
@@ -79,22 +105,37 @@ def force_stud_ip():
 
 force_stud_ip()
 
-# ========== HEALTHCHECK ДЛЯ RENDER ==========
+# ========== HEALTHCHECK ДЛЯ RENDER (расширенный) ==========
 class HealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
-        self.send_response(200)
+        path = self.path
+        response_text = ""
+        
+        if path == "/" or path == "/health":
+            response_text = "🤖 Bot is running"
+            self.send_response(200)
+        elif path == "/status":
+            response_text = "✅ Status: OK\nUptime: active"
+            self.send_response(200)
+        elif path == "/ping":
+            response_text = "pong"
+            self.send_response(200)
+        elif path == "/api/health":
+            response_text = '{"status": "ok", "timestamp": "' + datetime.now().isoformat() + '"}'
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+        else:
+            response_text = "Not found"
+            self.send_response(404)
+        
+        self.send_header('Content-type', 'text/plain; charset=utf-8')
         self.end_headers()
-        self.wfile.write(b"Bot is running")
+        self.wfile.write(response_text.encode('utf-8'))
+    
     def log_message(self, format, *args):
+        # Отключаем шумные логи, но можно включить для отладки:
+        # print(f"📝 {format % args}")
         pass
-
-def run_health_server():
-    port = int(os.environ.get("PORT", 10000))
-    server = HTTPServer(('0.0.0.0', port), HealthCheckHandler)
-    print(f"🏥 Health-check сервер запущен на порту {port}")
-    server.serve_forever()
-
-Thread(target=run_health_server, daemon=True).start()
 
 # ========== ХРАНЕНИЕ ГРУПП ПОЛЬЗОВАТЕЛЕЙ ==========
 USER_GROUPS_FILE = "user_groups.json"
