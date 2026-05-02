@@ -102,37 +102,12 @@ def force_stud_ip():
 
 force_stud_ip()
 
-# ========== HEALTHCHECK ДЛЯ RENDER (расширенный) ==========
 class HealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
-        path = self.path
-        response_text = ""
-        
-        if path == "/" or path == "/health":
-            response_text = "🤖 Bot is running"
-            self.send_response(200)
-        elif path == "/status":
-            response_text = "✅ Status: OK\nUptime: active"
-            self.send_response(200)
-        elif path == "/ping":
-            response_text = "pong"
-            self.send_response(200)
-        elif path == "/api/health":
-            response_text = '{"status": "ok", "timestamp": "' + datetime.now().isoformat() + '"}'
-            self.send_response(200)
-            self.send_header('Content-type', 'application/json')
-        else:
-            response_text = "Not found"
-            self.send_response(404)
-        
-        self.send_header('Content-type', 'text/plain; charset=utf-8')
+        self.send_response(200)  # Отправляем код успеха
         self.end_headers()
-        self.wfile.write(response_text.encode('utf-8'))
-    
-    def log_message(self, format, *args):
-        # Отключаем шумные логи, но можно включить для отладки:
-        # print(f"📝 {format % args}")
-        pass
+        self.wfile.write(b"Bot is running")
+
 
 # ========== ХРАНЕНИЕ ГРУПП ПОЛЬЗОВАТЕЛЕЙ ==========
 USER_GROUPS_FILE = "user_groups.json"
