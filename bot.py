@@ -14,80 +14,77 @@ import threading
 import time
 import requests
 
-# ========== ПРОДВИНУТЫЙ SELF-PING (с эмуляцией браузера) ==========
+# ========== SELF-PING (бот обходит свой сайт) ==========
 
-def self_ping_advanced():
-    """Продвинутый self-ping с эмуляцией браузера и случайными интервалами"""
-    import random
-    
-    # User-Agent'ы разных браузеров для имитации реальных пользователей
-    user_agents = [
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0",
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Safari/537.36",
-        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/119.0.0.0",
-        "Mozilla/5.0 (Windows NT 10.0; rv:109.0) Gecko/20100101 Firefox/119.0"
-    ]
-    
+def self_ping():
+    """Периодически заходит на разные страницы бота, чтобы Render не усыплял"""
     while True:
         try:
             port = os.environ.get('PORT', 10000)
+            base_urls = []
+            
+            # Внешний URL (основной)
             render_url = os.environ.get("RENDER_EXTERNAL_URL")
+            if render_url:
+                base_urls.append(render_url)
             
-            if not render_url:
-                time.sleep(60)
-                continue
+            # Локальный URL (для внутреннего доступа)
+            base_urls.append(f"http://localhost:{port}")
+            base_urls.append(f"http://127.0.0.1:{port}")
             
-            # Случайный User-Agent
-            user_agent = random.choice(user_agents)
-            headers = {
-                'User-Agent': user_agent,
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                'Accept-Language': 'ru-RU,ru;q=0.8,en-US;q=0.5,en;q=0.3',
-                'Accept-Encoding': 'gzip, deflate',
-                'Connection': 'keep-alive'
-            }
-            
-            # Разные URL для обхода
-            urls_to_visit = [
-                f"{render_url}/",
-                f"{render_url}/health",
-                f"{render_url}/status",
-                f"{render_url}/ping",
+            # Разные пути для обхода (имитируем просмотр страниц)
+            paths = [
+                "/",
+                "/health",
+                "/status",
+                "/ping",
+                "/api/health",
+                "/bot/status"
             ]
             
-            print(f"🌐 Начинаю обход сайта... (User-Agent: {user_agent[:50]}...)")
+            success_count = 0
             
-            for url in urls_to_visit:
-                try:
-                    start_time = time.time()
-                    response = requests.get(url, headers=headers, timeout=15)
-                    elapsed = int((time.time() - start_time) * 1000)
-                    
-                    if response.status_code == 200:
-                        print(f"   ✅ {url} → {response.status_code} ({elapsed}ms)")
-                    else:
-                        print(f"   ⚠️ {url} → {response.status_code}")
-                    
-                    # Случайная пауза между запросами (1-3 секунды)
-                    time.sleep(random.uniform(1, 3))
-                    
-                except Exception as e:
-                    print(f"   ❌ {url} → {str(e)[:50]}")
+            for base_url in base_urls:
+                for path in paths:
+                    try:
+                        full_url = f"{base_url}{path}"
+                        start_time = time.time()
+                        response = requests.get(full_url, timeout=10)
+                        elapsed = int((time.time() - start_time) * 1000)
+                        
+                        if response.status_code == 200:
+                            print(f"🌐 [{datetime.now().strftime('%H:%M:%S')}] {full_url} → {response.status_code} ({elapsed}ms)")
+                            success_count += 1
+                        else:
+                            print(f"⚠️ {full_url} → {response.status_code}")
+                            
+                        # Небольшая задержка между запросами (имитация чтения)
+                        time.sleep(2)
+                        
+                    except requests.exceptions.Timeout:
+                        print(f"⏰ Таймаут: {full_url}")
+                    except requests.exceptions.ConnectionError:
+                        print(f"🔌 Ошибка соединения: {full_url}")
+                    except Exception as e:
+                        print(f"❌ Ошибка: {full_url} - {str(e)[:50]}")
             
-            # Случайная пауза между циклами (10-15 минут)
-            wait_time = random.randint(600, 900)  # 10-15 минут
-            print(f"💤 Обход завершён. Следующий через {wait_time // 60} минут")
-            time.sleep(wait_time)
-            
+            if success_count > 0:
+                print(f"✅ Self-ping завершён: {success_count} успешных запросов")
+            else:
+                print(f"⚠️ Self-ping: все попытки не удались")
+                
         except Exception as e:
             print(f"⚠️ Self-ping ошибка: {e}")
-            time.sleep(300)
+        
+        # Ждём 5 минут между циклами обхода
+        print(f"💤 Пауза 5 минут до следующего обхода...")
+        time.sleep(300)  # 5 минут (300 секунд)
 
 def start_self_ping():
-    """Запускает продвинутый self-ping в отдельном потоке"""
-    ping_thread = threading.Thread(target=self_ping_advanced, daemon=True)
+    """Запускает self-ping в отдельном потоке"""
+    ping_thread = threading.Thread(target=self_ping, daemon=True)
     ping_thread.start()
-    print("✅ Self-ping активирован (продвинутый режим, обход страниц)")
+    print("✅ Self-ping активирован (обход страниц каждые 5 минут)")
 
 # ========== FIX ДЛЯ DNS ПРОБЛЕМ НА RENDER ==========
 STUD_SSSU_IP = "89.16.96.207"
