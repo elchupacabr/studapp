@@ -1463,22 +1463,20 @@ def handle_message(text, user_id, peer_id, from_chat, vk):
     if text_lower.startswith("выбрать "):
         group_name = text_lower.replace("выбрать ", "").strip()
         if group_name:
-            # Нормализуем название для поиска
-            normalized_name = normalize_group_name(group_name)
-            group_id, found_name, suggestions = find_group_by_name(normalized_name)
-        if group_id:
-            set_user_group(user_id, group_id, found_name)
-            clear_user_selection(user_id)
-            send_keyboard(vk, peer_id, f"✅ Группа `{found_name}` сохранена!", get_main_keyboard(user_has_group=True))
-        else:
-            if suggestions:
-                send_keyboard(vk, peer_id, f"❌ Группа `{group_name}` не найдена.\n\n🤔 Возможно: {', '.join(suggestions[:3])}", get_main_keyboard(user_has_group=False))
+            group_id, found_name, suggestions = find_group_by_name(group_name)
+            if group_id:
+                set_user_group(user_id, group_id, found_name)
+                clear_user_selection(user_id)
+                send_keyboard(vk, peer_id, f"✅ Группа `{found_name}` сохранена!", get_main_keyboard(user_has_group=True))
             else:
-                send_keyboard(vk, peer_id, f"❌ Группа `{group_name}` не найдена\nПопробуйте: `выбрать иктс тб31`", get_main_keyboard(user_has_group=False))
-    else:
-        send_keyboard(vk, peer_id, "❓ Напишите название группы", get_main_keyboard(user_has_group=False))
-    return
-
+                if suggestions:
+                    send_keyboard(vk, peer_id, f"❌ Группа `{group_name}` не найдена.\n\n🤔 Возможно: {', '.join(suggestions[:3])}", get_main_keyboard(user_has_group=False))
+                else:
+                    send_keyboard(vk, peer_id, f"❌ Группа `{group_name}` не найдена", get_main_keyboard(user_has_group=False))
+        else:
+            send_keyboard(vk, peer_id, "❓ Напишите название группы", get_main_keyboard(user_has_group=False))
+        return
+    
     # Команда "узнать группу" или "моя группа"
     if text_lower == "моя группа" or text_lower == "моя группа?" or text_lower == "моя группа":
         user_group = get_user_group(user_id)
