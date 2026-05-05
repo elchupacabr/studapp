@@ -165,10 +165,27 @@ def get_all_teachers():
                         teachers[teacher_name] = {"name": teacher_name}
     return list(teachers.values())
 
-def get_all_auditoriums():
+def get_all_auditoriums(force_refresh=False):
+    """Быстрое получение списка аудиторий с кэшированием"""
+    cache_file = "auditoriums_cache.json"
+    cache_time = 86400  # 24 часа
+    
+    if not force_refresh and os.path.exists(cache_file):
+        mtime = os.path.getmtime(cache_file)
+        if time.time() - mtime < cache_time:
+            try:
+                with open(cache_file, "r", encoding="utf-8") as f:
+                    cached = json.load(f)
+                    print(f"📦 Загружены аудитории из кэша: {len(cached)} шт.")
+                    return cached
+            except:
+                pass
+    
     all_groups_data = get_all_groups()
     auditoriums = set()
-    for group in all_groups_data[:15]:
+    
+    # Ограничиваем количество групп для быстрого ответа
+    for group in all_groups_data[:10]:
         group_id = group["id"]
         dates = fetch_available_dates(group_id)
         for date in dates[:3]:
@@ -178,8 +195,66 @@ def get_all_auditoriums():
                 for lesson in lessons:
                     room = lesson.get("аудитория", "")
                     if room:
-                        auditoriums.add(room)
-    return sorted(list(auditoriums))
+                        # Очищаем название аудитории
+                        room = room.strip()
+                        if room and len(room) <= 10:  # Фильтруем некорректные
+                            auditoriums.add(room)
+    
+    result = sorted(list(auditoriums))
+    
+    try:
+        with open(cache_file, "w", encoding="utf-8") as f:
+            json.dump(result, f, ensure_ascii=False, indent=2)
+    except:
+        pass
+    
+    print(f"✅ Загружены аудитории: {len(result)} шт.")
+    return result
+
+def get_all_teachers(force_refresh=False):
+    """Быстрое получение списка преподавателей с кэшированием"""
+    cache_file = "teachers_cache.json"
+    cache_time = 86400  # 24 часа
+    
+    if not force_refresh and os.path.exists(cache_file):
+        mtime = os.path.getmtime(cache_file)
+        if time.time() - mtime < cache_time:
+            try:
+                with open(cache_file, "r", encoding="utf-8") as f:
+                    cached = json.load(f)
+                    print(f"📦 Загружены преподаватели из кэша: {len(cached)} шт.")
+                    return cached
+            except:
+                pass
+    
+    all_groups_data = get_all_groups()
+    teachers = {}
+    
+    # Ограничиваем количество групп для быстрого ответа
+    for group in all_groups_data[:10]:
+        group_id = group["id"]
+        dates = fetch_available_dates(group_id)
+        for date in dates[:3]:
+            data, _ = fetch_schedule(group_id, date)
+            if data:
+                lessons = data.get("data", {}).get("rasp", [])
+                for lesson in lessons:
+                    teacher_name = lesson.get("преподаватель", "")
+                    if teacher_name:
+                        teacher_name = teacher_name.strip()
+                        if teacher_name and teacher_name not in teachers:
+                            teachers[teacher_name] = {"name": teacher_name}
+    
+    result = list(teachers.values())
+    
+    try:
+        with open(cache_file, "w", encoding="utf-8") as f:
+            json.dump(result, f, ensure_ascii=False, indent=2)
+    except:
+        pass
+    
+    print(f"✅ Загружены преподаватели: {len(result)} шт.")
+    return result
 
 def fetch_schedule_by_teacher(teacher_name, date=None):
     if date is None:
@@ -329,15 +404,36 @@ def get_week_for_date(date_str):
     return monday.strftime("%Y-%m-%d"), sunday.strftime("%Y-%m-%d")
 
 def normalize_group_name(name):
-    """Нормализует название группы: заменяет английскую b на русскую, убирает тире, приводит к нижнему регистру"""
+    """
+    Нормализует название группы для поиска:
+    - Игнорирует регистр (заглавные/строчные буквы)
+    - Заменяет английские буквы на русские (T/t -> Т, B/b -> Б)
+    - Убирает тире, пробелы и другие разделители
+    """
+    # Приводим к нижнему регистру
     name_lower = name.lower().strip()
-    # Заменяем английскую b на русскую т
-    name_lower = name_lower.replace('b', 'т')
-    # Убираем тире
-    name_lower = name_lower.replace('-', '')
-    # Убираем лишние пробелы
-    name_lower = re.sub(r'\s+', '', name_lower)
-    # Разделяем буквы и цифры для лучшего поиска
+    
+    # Словарь замены английских букв на русские
+    replacements = {
+        't': 'т',
+        'b': 'б',
+        'tb': 'тб',
+        'tb': 'тб',
+        't b': 'тб'
+    }
+    
+    # Применяем замены
+    for eng, rus in replacements.items():
+        name_lower = name_lower.replace(eng, rus)
+    
+    # Убираем всё, кроме букв и цифр
+    # (тире, пробелы, точки, подчёркивания удаляем)
+    name_lower = re.sub(r'[-\s\._]+', '', name_lower)
+    
+    # Удаляем возможные дублирующиеся буквы
+    # (например, если было 'ттб' -> 'тб')
+    name_lower = re.sub(r'([а-яё])\1+', r'\1', name_lower)
+    
     return name_lower
 
 # ========== СИСТЕМА ОТСЛЕЖИВАНИЯ ИЗМЕНЕНИЙ РАСПИСАНИЯ ==========
@@ -509,20 +605,26 @@ def find_group_by_name(search_name, year=None):
     all_groups = get_all_groups(year)
     if not all_groups:
         return None, None, []
+    
     # Нормализуем поисковый запрос
     normalized_search = normalize_group_name(search_name)
-    # Ищем среди нормализованных названий групп
+    
+    # Точное совпадение после нормализации
     for group in all_groups:
         normalized_group = normalize_group_name(group["name"])
         if normalized_group == normalized_search:
             return group["id"], group["name"], []
+    
+    # Частичное совпадение (начинается с)
     for group in all_groups:
         normalized_group = normalize_group_name(group["name"])
         if normalized_group.startswith(normalized_search):
             return group["id"], group["name"], []
+    
     # Поиск похожих названий
     all_names_normalized = [normalize_group_name(g["name"]) for g in all_groups]
     all_names_original = [g["name"] for g in all_groups]
+    
     matches = difflib.get_close_matches(normalized_search, all_names_normalized, n=5, cutoff=0.6)
     original_matches = []
     for match_lower in matches:
@@ -531,6 +633,7 @@ def find_group_by_name(search_name, year=None):
             original_matches.append(all_names_original[index])
         except ValueError:
             continue
+    
     return None, None, original_matches
 
 def get_group_name_by_id(group_id, year=None):
@@ -553,12 +656,21 @@ def search_groups_by_keyword(keyword):
     all_groups = get_all_groups()
     if not all_groups:
         return []
-    keyword_lower = normalize_group_name(keyword)
+    
+    # Нормализуем ключевое слово
+    keyword_normalized = normalize_group_name(keyword)
+    
     results = []
     for group in all_groups:
-        normalized_group = normalize_group_name(group["name"])
-        if keyword_lower in normalized_group:
+        group_normalized = normalize_group_name(group["name"])
+        # Ищем частичное совпадение
+        if keyword_normalized in group_normalized:
             results.append(group)
+        # Также ищем по оригинальному названию
+        elif keyword.lower() in group["name"].lower():
+            if group not in results:
+                results.append(group)
+    
     return sorted(results, key=lambda x: x["name"])
 
 def get_groups_list_message(page=1):
@@ -1351,20 +1463,22 @@ def handle_message(text, user_id, peer_id, from_chat, vk):
     if text_lower.startswith("выбрать "):
         group_name = text_lower.replace("выбрать ", "").strip()
         if group_name:
-            group_id, found_name, suggestions = find_group_by_name(group_name)
-            if group_id:
-                set_user_group(user_id, group_id, found_name)
-                clear_user_selection(user_id)
-                send_keyboard(vk, peer_id, f"✅ Группа `{found_name}` сохранена!", get_main_keyboard(user_has_group=True))
-            else:
-                if suggestions:
-                    send_keyboard(vk, peer_id, f"❌ Группа `{group_name}` не найдена.\n\n🤔 Возможно: {', '.join(suggestions[:3])}", get_main_keyboard(user_has_group=False))
-                else:
-                    send_keyboard(vk, peer_id, f"❌ Группа `{group_name}` не найдена", get_main_keyboard(user_has_group=False))
+            # Нормализуем название для поиска
+            normalized_name = normalize_group_name(group_name)
+            group_id, found_name, suggestions = find_group_by_name(normalized_name)
+        if group_id:
+            set_user_group(user_id, group_id, found_name)
+            clear_user_selection(user_id)
+            send_keyboard(vk, peer_id, f"✅ Группа `{found_name}` сохранена!", get_main_keyboard(user_has_group=True))
         else:
-            send_keyboard(vk, peer_id, "❓ Напишите название группы", get_main_keyboard(user_has_group=False))
-        return
-    
+            if suggestions:
+                send_keyboard(vk, peer_id, f"❌ Группа `{group_name}` не найдена.\n\n🤔 Возможно: {', '.join(suggestions[:3])}", get_main_keyboard(user_has_group=False))
+            else:
+                send_keyboard(vk, peer_id, f"❌ Группа `{group_name}` не найдена\nПопробуйте: `выбрать иктс тб31`", get_main_keyboard(user_has_group=False))
+    else:
+        send_keyboard(vk, peer_id, "❓ Напишите название группы", get_main_keyboard(user_has_group=False))
+    return
+
     # Команда "узнать группу" или "моя группа"
     if text_lower == "моя группа" or text_lower == "моя группа?" or text_lower == "моя группа":
         user_group = get_user_group(user_id)
@@ -1486,6 +1600,17 @@ def main():
     get_current_academic_year()
     get_all_groups()
     
+    # Предзагружаем списки в фоновом потоке (чтобы не зависало)
+    def preload():
+        print("🔄 Предзагрузка списков в фоне...")
+        get_all_teachers()
+        get_all_auditoriums()
+        print("✅ Предзагрузка завершена")
+    
+    preload_thread = threading.Thread(target=preload, daemon=True)
+    preload_thread.start()
+    
+    # ... остальной код main()    
     vk_session = vk_api.VkApi(token=VK_TOKEN)
     vk = vk_session.get_api()
     longpoll = VkBotLongPoll(vk_session, GROUP_ID)
