@@ -1,2 +1,2 @@
-vk-api
-requests
+vk-api==11.10.0
+requests==2.33.1
