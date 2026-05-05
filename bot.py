@@ -149,8 +149,13 @@ def clear_user_selection(user_id):
         save_user_selections(selections)
 
 # ========== РАБОТА С ПРЕПОДАВАТЕЛЯМИ И АУДИТОРИЯМИ ==========
-# ========== ОПТИМИЗИРОВАННЫЙ СПИСОК АУДИТОРИЙ ==========
-# Основные (частые) аудитории
+# ========== БЫСТРЫЙ ПОИСК ПРЕПОДАВАТЕЛЕЙ И АУДИТОРИЙ ==========
+# Хранилище для быстрого поиска (строим индексы)
+teachers_index = {}
+auditoriums_index = {}
+index_built = False
+
+# Приоритетные аудитории для быстрого доступа
 PRIORITY_AUDITORIUMS = [
     "1301", "1312", "1221", "1310", "1101",  # 1 корпус
     "1209", "1210", "1204", "1206", "1209",  # 1 корпус
@@ -162,136 +167,128 @@ PRIORITY_AUDITORIUMS = [
     "2342", "2251", "2261"
 ]
 
-def get_all_auditoriums(force_refresh=False):
-    """Быстрое получение списка аудиторий с приоритетными"""
-    cache_file = "auditoriums_cache.json"
-    cache_time = 86400  # 24 часа
+def build_search_index():
+    """Строит индекс для быстрого поиска (один раз при старте)"""
+    global teachers_index, auditoriums_index, index_built
     
-    if not force_refresh and os.path.exists(cache_file):
-        mtime = os.path.getmtime(cache_file)
-        if time.time() - mtime < cache_time:
-            try:
-                with open(cache_file, "r", encoding="utf-8") as f:
-                    cached = json.load(f)
-                    print(f"📦 Загружены аудитории из кэша: {len(cached)} шт.")
-                    return cached
-            except:
-                pass
+    if index_built:
+        return
     
-    # Начинаем с приоритетных аудиторий
-    auditoriums = set(PRIORITY_AUDITORIUMS)
+    print("🔨 Построение поискового индекса...")
     
-    # Быстро собираем основные аудитории (до 10 групп)
+    cache_file_teachers = "teachers_index_cache.json"
+    cache_file_auditoriums = "auditoriums_index_cache.json"
+    
+    # Пробуем загрузить из кэша
+    if os.path.exists(cache_file_teachers) and os.path.exists(cache_file_auditoriums):
+        try:
+            with open(cache_file_teachers, "r", encoding="utf-8") as f:
+                teachers_temp = json.load(f)
+            with open(cache_file_auditoriums, "r", encoding="utf-8") as f:
+                auditoriums_temp = json.load(f)
+            print(f"📦 Индекс загружен из кэша: {len(teachers_temp)} преп., {len(auditoriums_temp)} ауд.")
+            teachers_index = teachers_temp
+            auditoriums_index = {a: a for a in auditoriums_temp}
+            index_built = True
+            return
+        except:
+            pass
+    
+    # Собираем данные из 5 групп
     all_groups_data = get_all_groups()
-    for group in all_groups_data[:7]:  # Всего 7 групп для скорости
+    teachers_temp = {}
+    auditoriums_temp = set(PRIORITY_AUDITORIUMS)
+    
+    for group in all_groups_data[:5]:
         group_id = group["id"]
         dates = fetch_available_dates(group_id)
-        for date in dates[:2]:  # Всего 2 даты
+        for date in dates[:3]:
             data, _ = fetch_schedule(group_id, date)
             if data:
                 lessons = data.get("data", {}).get("rasp", [])
                 for lesson in lessons:
+                    teacher = lesson.get("преподаватель", "")
+                    if teacher and teacher not in teachers_temp:
+                        name_parts = teacher.lower().split()
+                        teachers_temp[teacher] = {
+                            "full": teacher,
+                            "parts": name_parts,
+                            "last_name": name_parts[-1] if name_parts else teacher.lower()
+                        }
+                    
                     room = lesson.get("аудитория", "")
-                    if room and len(room) <= 10 and room not in auditoriums:
-                        auditoriums.add(room)
+                    if room and len(room) <= 10:
+                        auditoriums_temp.add(room)
     
-    result = sorted(list(auditoriums))
+    teachers_index = teachers_temp
+    auditoriums_index = {a: a for a in auditoriums_temp}
     
+    # Сохраняем в кэш
     try:
-        with open(cache_file, "w", encoding="utf-8") as f:
-            json.dump(result, f, ensure_ascii=False, indent=2)
+        with open(cache_file_teachers, "w", encoding="utf-8") as f:
+            json.dump(teachers_index, f, ensure_ascii=False, indent=2)
+        with open(cache_file_auditoriums, "w", encoding="utf-8") as f:
+            json.dump(list(auditoriums_temp), f, ensure_ascii=False, indent=2)
     except:
         pass
     
-    print(f"✅ Загружены аудитории: {len(result)} шт.")
-    return result
+    index_built = True
+    print(f"✅ Индекс построен: {len(teachers_index)} преп., {len(auditoriums_index)} ауд.")
 
-# ========== ОПТИМИЗИРОВАННЫЙ СПИСОК ПРЕПОДАВАТЕЛЕЙ ==========
-# Часто искомые преподаватели (можно пополнять автоматически)
-COMMON_TEACHERS_CACHE = "common_teachers.json"
+def quick_search_teachers(query, limit=10):
+    """Быстрый поиск преподавателей по индексу"""
+    if not index_built:
+        build_search_index()
+    
+    query_lower = query.lower().strip()
+    results = []
+    
+    for teacher, data in teachers_index.items():
+        if query_lower in data["last_name"]:
+            results.append({"name": teacher, "score": 100})
+        elif any(query_lower in part for part in data["parts"]):
+            results.append({"name": teacher, "score": 50})
+        elif query_lower in data["full"].lower():
+            results.append({"name": teacher, "score": 30})
+    
+    results.sort(key=lambda x: x["score"], reverse=True)
+    return [r["name"] for r in results[:limit]]
 
-def get_all_teachers(force_refresh=False):
-    """Быстрое получение списка преподавателей с кэшированием и приоритетом"""
-    cache_file = "teachers_cache.json"
-    cache_time = 86400  # 24 часа
+def quick_search_auditoriums(query, limit=10):
+    """Быстрый поиск аудиторий"""
+    if not index_built:
+        build_search_index()
     
-    if not force_refresh and os.path.exists(cache_file):
-        mtime = os.path.getmtime(cache_file)
-        if time.time() - mtime < cache_time:
-            try:
-                with open(cache_file, "r", encoding="utf-8") as f:
-                    cached = json.load(f)
-                    print(f"📦 Загружены преподаватели из кэша: {len(cached)} шт.")
-                    return cached
-            except:
-                pass
+    query_lower = query.lower().strip()
+    results = []
     
-    # Загружаем часто искомых преподавателей
-    common_teachers = load_common_teachers()
-    teachers = {t["name"]: t for t in common_teachers}
+    for aud in auditoriums_index.keys():
+        if query_lower in aud.lower():
+            results.append(aud)
     
-    # Быстро собираем остальных (до 7 групп)
-    all_groups_data = get_all_groups()
-    for group in all_groups_data[:7]:
-        group_id = group["id"]
-        dates = fetch_available_dates(group_id)
-        for date in dates[:2]:
-            data, _ = fetch_schedule(group_id, date)
-            if data:
-                lessons = data.get("data", {}).get("rasp", [])
-                for lesson in lessons:
-                    teacher_name = lesson.get("преподаватель", "")
-                    if teacher_name:
-                        teacher_name = teacher_name.strip()
-                        if teacher_name and teacher_name not in teachers:
-                            teachers[teacher_name] = {"name": teacher_name}
-    
-    result = list(teachers.values())
-    
-    try:
-        with open(cache_file, "w", encoding="utf-8") as f:
-            json.dump(result, f, ensure_ascii=False, indent=2)
-    except:
-        pass
-    
-    print(f"✅ Загружены преподаватели: {len(result)} шт.")
-    return result
+    return results[:limit]
 
-def load_common_teachers():
-    """Загружает список часто искомых преподавателей"""
-    try:
-        if os.path.exists(COMMON_TEACHERS_CACHE):
-            with open(COMMON_TEACHERS_CACHE, "r", encoding="utf-8") as f:
-                return json.load(f)
-    except:
-        pass
-    return []
+def get_teachers_list_fast():
+    """Быстрое получение списка преподавателей (первые 20)"""
+    if not index_built:
+        build_search_index()
+    
+    sorted_teachers = sorted(teachers_index.keys())[:20]
+    return [{"name": t} for t in sorted_teachers]
 
-def save_common_teachers(teachers):
-    """Сохраняет список часто искомых преподавателей"""
-    try:
-        with open(COMMON_TEACHERS_CACHE, "w", encoding="utf-8") as f:
-            json.dump(teachers, f, ensure_ascii=False, indent=2)
-    except:
-        pass
-
-def add_to_common_teachers(teacher_name):
-    """Добавляет преподавателя в список часто искомых"""
-    common = load_common_teachers()
-    if teacher_name not in [t["name"] for t in common]:
-        common.append({"name": teacher_name})
-        # Оставляем только последние 50
-        if len(common) > 50:
-            common = common[-50:]
-        save_common_teachers(common)
-        
+def get_auditoriums_list_fast():
+    """Быстрое получение списка аудиторий (первые 20)"""
+    if not index_built:
+        build_search_index()
+    
+    return sorted(list(auditoriums_index.keys()))[:20]
 
 def fetch_schedule_by_teacher(teacher_name, date=None):
     if date is None:
         date = datetime.now().strftime("%Y-%m-%d")
     all_groups_data = get_all_groups()
     lessons_found = []
-    for group in all_groups_data[:50]:
+    for group in all_groups_data[:30]:
         group_id = group["id"]
         data, _ = fetch_schedule(group_id, date)
         if data:
@@ -313,7 +310,7 @@ def fetch_schedule_by_auditorium(auditorium, date=None):
         date = datetime.now().strftime("%Y-%m-%d")
     all_groups_data = get_all_groups()
     lessons_found = []
-    for group in all_groups_data[:50]:
+    for group in all_groups_data[:30]:
         group_id = group["id"]
         data, _ = fetch_schedule(group_id, date)
         if data:
@@ -364,20 +361,38 @@ def format_auditorium_schedule(auditorium, lessons, date):
             result += "-" * 35 + "\n"
     return result
 
+def add_to_common_teachers(teacher_name):
+    """Добавляет преподавателя в список часто искомых"""
+    common_file = "common_teachers.json"
+    common = []
+    if os.path.exists(common_file):
+        try:
+            with open(common_file, "r", encoding="utf-8") as f:
+                common = json.load(f)
+        except:
+            pass
+    
+    if teacher_name not in common:
+        common.append(teacher_name)
+        if len(common) > 50:
+            common = common[-50:]
+        try:
+            with open(common_file, "w", encoding="utf-8") as f:
+                json.dump(common, f, ensure_ascii=False, indent=2)
+        except:
+            pass
+
 def search_teachers_by_keyword(keyword):
-    all_teachers = get_all_teachers()
     keyword_lower = keyword.lower()
     results = [t for t in all_teachers if keyword_lower in t["name"].lower()]
     return results[:20]
 
 def search_auditoriums_by_keyword(keyword):
-    all_auditoriums = get_all_auditoriums()
     keyword_lower = keyword.lower()
     results = [a for a in all_auditoriums if keyword_lower in a.lower()]
     return results[:20]
 
 def get_teachers_list_message(page=1):
-    teachers = get_all_teachers()
     if not teachers:
         return "❌ Не удалось загрузить список преподавателей"
     per_page = 15
@@ -392,7 +407,6 @@ def get_teachers_list_message(page=1):
     return result
 
 def get_auditoriums_list_message(page=1):
-    auditoriums = get_all_auditoriums()
     if not auditoriums:
         return "❌ Не удалось загрузить список аудиторий"
     per_page = 15
@@ -1168,24 +1182,47 @@ def handle_message(text, user_id, peer_id, from_chat, vk):
                 else:
                     send_keyboard(vk, peer_id, f"❌ Группа `{group_name}` не найдена.\nПопробуйте `📚 ВСЕ ГРУППЫ`", get_search_keyboard())
             return
+        
         elif state.get("mode") == "waiting_for_teacher":
-            teacher_name = text.strip()
-            if teacher_name:
-                set_user_selection(user_id, "teacher", teacher_name)
-                del user_states[user_id_str]
-                # Показываем расписание на сегодня (неделя)
-                answer = get_schedule_for_today_by_teacher(teacher_name)
-                send_keyboard(vk, peer_id, answer, get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
+            teacher_query = text.strip()
+            if teacher_query:
+                results = quick_search_teachers(teacher_query)
+                if results:
+                    if len(results) == 1:
+                        set_user_selection(user_id, "teacher", results[0])
+                        del user_states[user_id_str]
+                        answer = get_schedule_for_today_by_teacher(results[0])
+                        send_keyboard(vk, peer_id, answer, get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
+                    else:
+                        message = f"🔍 Найдено преподавателей по запросу `{teacher_query}`:\n\n"
+                        for t in results[:10]:
+                            message += f"📌 {t}\n"
+                        message += f"\n💡 Уточните запрос или выберите из списка"
+                        send_keyboard(vk, peer_id, message, get_search_keyboard())
+                else:
+                    send_keyboard(vk, peer_id, f"❌ Преподаватель `{teacher_query}` не найден", get_search_keyboard())
             else:
                 send_keyboard(vk, peer_id, "❓ Введите фамилию преподавателя", get_search_keyboard())
             return
+
         elif state.get("mode") == "waiting_for_auditorium":
-            auditorium = text.strip()
-            if auditorium:
-                set_user_selection(user_id, "auditorium", auditorium)
-                del user_states[user_id_str]
-                answer = get_schedule_for_today_by_auditorium(auditorium)
-                send_keyboard(vk, peer_id, answer, get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
+            auditorium_query = text.strip()
+            if auditorium_query:
+                results = quick_search_auditoriums(auditorium_query)
+                if results:
+                    if len(results) == 1:
+                        set_user_selection(user_id, "auditorium", results[0])
+                        del user_states[user_id_str]
+                        answer = get_schedule_for_today_by_auditorium(results[0])
+                        send_keyboard(vk, peer_id, answer, get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
+                    else:
+                        message = f"🔍 Найдено аудиторий по запросу `{auditorium_query}`:\n\n"
+                        for a in results[:10]:
+                            message += f"📌 {a}\n"
+                        message += f"\n💡 Уточните запрос или выберите из списка"
+                        send_keyboard(vk, peer_id, message, get_search_keyboard())
+                else:
+                    send_keyboard(vk, peer_id, f"❌ Аудитория `{auditorium_query}` не найдена", get_search_keyboard())
             else:
                 send_keyboard(vk, peer_id, "❓ Введите номер аудитории", get_search_keyboard())
             return
@@ -1204,33 +1241,31 @@ def handle_message(text, user_id, peer_id, from_chat, vk):
         send_keyboard(vk, peer_id, message, get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
         return
     if text == "👨‍🏫 ПРЕПОДАВАТЕЛИ":
-        teachers = get_all_teachers()
+        teachers = get_teachers_list_fast()
         if teachers:
             message = "👨‍🏫 *Список преподавателей*\n\n"
-            for t in teachers[:20]:
+            for t in teachers[:15]:
                 message += f"📌 {t['name']}\n"
-            if len(teachers) > 20:
-                message += f"\n... и ещё {len(teachers) - 20}"
-            message += f"\n\n💡 Напишите фамилию преподавателя для просмотра расписания"
+            message += f"\n💡 Напишите фамилию для поиска (например: `Окорочков`)"
             user_states[user_id_str] = {"mode": "waiting_for_teacher"}
             send_keyboard(vk, peer_id, message, get_search_keyboard())
         else:
-            send_keyboard(vk, peer_id, "❌ Не удалось загрузить список преподавателей", get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
+            send_keyboard(vk, peer_id, "❌ Не удалось загрузить список", get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
         return
+
     if text == "🏢 АУДИТОРИИ":
-        auditoriums = get_all_auditoriums()
+        auditoriums = get_auditoriums_list_fast()
         if auditoriums:
             message = "🏫 *Список аудиторий*\n\n"
-            for a in auditoriums[:20]:
+            for a in auditoriums[:15]:
                 message += f"📌 {a}\n"
-            if len(auditoriums) > 20:
-                message += f"\n... и ещё {len(auditoriums) - 20}"
-            message += f"\n\n💡 Напишите номер аудитории для просмотра расписания"
+            message += f"\n💡 Напишите номер для поиска (например: `2349`)"
             user_states[user_id_str] = {"mode": "waiting_for_auditorium"}
             send_keyboard(vk, peer_id, message, get_search_keyboard())
         else:
-            send_keyboard(vk, peer_id, "❌ Не удалось загрузить список аудиторий", get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
+            send_keyboard(vk, peer_id, "❌ Не удалось загрузить список", get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
         return
+    
     if text == "📅 РАСПИСАНИЕ":
         if current_selection["type"] == "teacher":
             answer = get_schedule_for_today_by_teacher(current_selection["name"])
@@ -1633,17 +1668,15 @@ def main():
     get_current_academic_year()
     get_all_groups()
     
-    # Предзагружаем списки в фоновом потоке (чтобы не зависало)
-    def preload():
-        print("🔄 Предзагрузка списков в фоне...")
-        get_all_teachers()
-        get_all_auditoriums()
-        print("✅ Предзагрузка завершена")
+    # Строим поисковый индекс в фоне
+    def build_index():
+        print("🔨 Построение поискового индекса...")
+        build_search_index()
+        print("✅ Поисковый индекс готов")
     
-    preload_thread = threading.Thread(target=preload, daemon=True)
-    preload_thread.start()
+    index_thread = threading.Thread(target=build_index, daemon=True)
+    index_thread.start()
     
-    # ... остальной код main()    
     vk_session = vk_api.VkApi(token=VK_TOKEN)
     vk = vk_session.get_api()
     longpoll = VkBotLongPoll(vk_session, GROUP_ID)
@@ -1652,9 +1685,8 @@ def main():
     
     print("🤖 Бот готов к работе!")
     print("📡 Функции: веб-сервер, self-ping, все кнопки")
-    print("👨‍🏫 Преподаватели и аудитории с запоминанием выбора")
-    print("🔙 Кнопка НАЗАД для возврата в главное меню")
-    print("📅 Поддержка дат в командах (неделя иктс тб31 на 12.05)")
+    print("👨‍🏫 Преподаватели и аудитории с быстрым поиском")
+    print("📅 Поддержка дат в командах")
     print("🕐 Автоматическая проверка обновлений: каждые 6 часов")
     print("=" * 40)
     
