@@ -149,24 +149,21 @@ def clear_user_selection(user_id):
         save_user_selections(selections)
 
 # ========== РАБОТА С ПРЕПОДАВАТЕЛЯМИ И АУДИТОРИЯМИ ==========
-def get_all_teachers():
-    all_groups_data = get_all_groups()
-    teachers = {}
-    for group in all_groups_data[:15]:
-        group_id = group["id"]
-        dates = fetch_available_dates(group_id)
-        for date in dates[:3]:
-            data, _ = fetch_schedule(group_id, date)
-            if data:
-                lessons = data.get("data", {}).get("rasp", [])
-                for lesson in lessons:
-                    teacher_name = lesson.get("преподаватель", "")
-                    if teacher_name and teacher_name not in teachers:
-                        teachers[teacher_name] = {"name": teacher_name}
-    return list(teachers.values())
+# ========== ОПТИМИЗИРОВАННЫЙ СПИСОК АУДИТОРИЙ ==========
+# Основные (частые) аудитории
+PRIORITY_AUDITORIUMS = [
+    "1301", "1312", "1221", "1310", "1101",  # 1 корпус
+    "1209", "1210", "1204", "1206", "1209",  # 1 корпус
+    "1203", "1221", "1403",   # 1 корпус
+    "2349", "2333", "2341", "2335",  # 2 корпус
+    "2168", "2336",  # 2 корпус
+    "2340", "2345", "2262",  # 2 корпус
+    "12212", "12202", "12308", "12304", "12214",  # 12 корпус
+    "2342", "2251", "2261"
+]
 
 def get_all_auditoriums(force_refresh=False):
-    """Быстрое получение списка аудиторий с кэшированием"""
+    """Быстрое получение списка аудиторий с приоритетными"""
     cache_file = "auditoriums_cache.json"
     cache_time = 86400  # 24 часа
     
@@ -181,24 +178,22 @@ def get_all_auditoriums(force_refresh=False):
             except:
                 pass
     
-    all_groups_data = get_all_groups()
-    auditoriums = set()
+    # Начинаем с приоритетных аудиторий
+    auditoriums = set(PRIORITY_AUDITORIUMS)
     
-    # Ограничиваем количество групп для быстрого ответа
-    for group in all_groups_data[:10]:
+    # Быстро собираем основные аудитории (до 10 групп)
+    all_groups_data = get_all_groups()
+    for group in all_groups_data[:7]:  # Всего 7 групп для скорости
         group_id = group["id"]
         dates = fetch_available_dates(group_id)
-        for date in dates[:3]:
+        for date in dates[:2]:  # Всего 2 даты
             data, _ = fetch_schedule(group_id, date)
             if data:
                 lessons = data.get("data", {}).get("rasp", [])
                 for lesson in lessons:
                     room = lesson.get("аудитория", "")
-                    if room:
-                        # Очищаем название аудитории
-                        room = room.strip()
-                        if room and len(room) <= 10:  # Фильтруем некорректные
-                            auditoriums.add(room)
+                    if room and len(room) <= 10 and room not in auditoriums:
+                        auditoriums.add(room)
     
     result = sorted(list(auditoriums))
     
@@ -211,8 +206,12 @@ def get_all_auditoriums(force_refresh=False):
     print(f"✅ Загружены аудитории: {len(result)} шт.")
     return result
 
+# ========== ОПТИМИЗИРОВАННЫЙ СПИСОК ПРЕПОДАВАТЕЛЕЙ ==========
+# Часто искомые преподаватели (можно пополнять автоматически)
+COMMON_TEACHERS_CACHE = "common_teachers.json"
+
 def get_all_teachers(force_refresh=False):
-    """Быстрое получение списка преподавателей с кэшированием"""
+    """Быстрое получение списка преподавателей с кэшированием и приоритетом"""
     cache_file = "teachers_cache.json"
     cache_time = 86400  # 24 часа
     
@@ -227,14 +226,16 @@ def get_all_teachers(force_refresh=False):
             except:
                 pass
     
-    all_groups_data = get_all_groups()
-    teachers = {}
+    # Загружаем часто искомых преподавателей
+    common_teachers = load_common_teachers()
+    teachers = {t["name"]: t for t in common_teachers}
     
-    # Ограничиваем количество групп для быстрого ответа
-    for group in all_groups_data[:10]:
+    # Быстро собираем остальных (до 7 групп)
+    all_groups_data = get_all_groups()
+    for group in all_groups_data[:7]:
         group_id = group["id"]
         dates = fetch_available_dates(group_id)
-        for date in dates[:3]:
+        for date in dates[:2]:
             data, _ = fetch_schedule(group_id, date)
             if data:
                 lessons = data.get("data", {}).get("rasp", [])
@@ -255,6 +256,35 @@ def get_all_teachers(force_refresh=False):
     
     print(f"✅ Загружены преподаватели: {len(result)} шт.")
     return result
+
+def load_common_teachers():
+    """Загружает список часто искомых преподавателей"""
+    try:
+        if os.path.exists(COMMON_TEACHERS_CACHE):
+            with open(COMMON_TEACHERS_CACHE, "r", encoding="utf-8") as f:
+                return json.load(f)
+    except:
+        pass
+    return []
+
+def save_common_teachers(teachers):
+    """Сохраняет список часто искомых преподавателей"""
+    try:
+        with open(COMMON_TEACHERS_CACHE, "w", encoding="utf-8") as f:
+            json.dump(teachers, f, ensure_ascii=False, indent=2)
+    except:
+        pass
+
+def add_to_common_teachers(teacher_name):
+    """Добавляет преподавателя в список часто искомых"""
+    common = load_common_teachers()
+    if teacher_name not in [t["name"] for t in common]:
+        common.append({"name": teacher_name})
+        # Оставляем только последние 50
+        if len(common) > 50:
+            common = common[-50:]
+        save_common_teachers(common)
+        
 
 def fetch_schedule_by_teacher(teacher_name, date=None):
     if date is None:
@@ -426,12 +456,15 @@ def normalize_group_name(name):
     for eng, rus in replacements.items():
         name_lower = name_lower.replace(eng, rus)
     
+    # Дополнительная обработка для случаев, когда T осталась
+    # Заменяем 't' на 'т', если ещё остались английские буквы
+    name_lower = re.sub(r'[t]+', 'т', name_lower)
+    name_lower = re.sub(r'[b]+', 'б', name_lower)
+    
     # Убираем всё, кроме букв и цифр
-    # (тире, пробелы, точки, подчёркивания удаляем)
     name_lower = re.sub(r'[-\s\._]+', '', name_lower)
     
     # Удаляем возможные дублирующиеся буквы
-    # (например, если было 'ттб' -> 'тб')
     name_lower = re.sub(r'([а-яё])\1+', r'\1', name_lower)
     
     return name_lower
@@ -1368,13 +1401,15 @@ def handle_message(text, user_id, peer_id, from_chat, vk):
     if text_lower.startswith("преподаватель "):
         teacher_name = text_lower.replace("преподаватель ", "").strip()
         if teacher_name:
+            # Добавляем в список часто искомых
+            add_to_common_teachers(teacher_name)
             set_user_selection(user_id, "teacher", teacher_name)
             answer = get_schedule_for_today_by_teacher(teacher_name)
             send_keyboard(vk, peer_id, answer, get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
         else:
             send_keyboard(vk, peer_id, "❓ Напишите фамилию преподавателя", get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
         return
-    
+
     # Команда "аудитория ..."
     if text_lower.startswith("аудитория "):
         auditorium = text_lower.replace("аудитория ", "").strip()
