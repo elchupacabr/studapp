@@ -89,26 +89,34 @@ def force_stud_ip():
     print("✅ DNS патч активирован")
 force_stud_ip()
 
-# ========== ХРАНЕНИЕ ГРУПП ПОЛЬЗОВАТЕЛЕЙ ==========
+# ========== ХРАНЕНИЕ ДАННЫХ ==========
 USER_GROUPS_FILE = "user_groups.json"
+USER_SELECTIONS_FILE = "user_selections.json"
 SCHEDULE_CACHE_FILE = "schedule_cache.json"
 
-def load_user_groups():
+def load_json_file(filepath):
     try:
-        if os.path.exists(USER_GROUPS_FILE):
-            with open(USER_GROUPS_FILE, "r", encoding="utf-8") as f:
+        if os.path.exists(filepath):
+            with open(filepath, "r", encoding="utf-8") as f:
                 return json.load(f)
         return {}
     except Exception as e:
-        print(f"Ошибка загрузки: {e}")
+        print(f"Ошибка загрузки {filepath}: {e}")
         return {}
 
-def save_user_groups(groups):
+def save_json_file(filepath, data):
     try:
-        with open(USER_GROUPS_FILE, "w", encoding="utf-8") as f:
-            json.dump(groups, f, ensure_ascii=False, indent=2)
+        with open(filepath, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
     except Exception as e:
-        print(f"Ошибка сохранения: {e}")
+        print(f"Ошибка сохранения {filepath}: {e}")
+        return
+
+def load_user_groups():
+    return load_json_file(USER_GROUPS_FILE)
+
+def save_user_groups(groups):
+    save_json_file(USER_GROUPS_FILE, groups)
 
 def get_user_group(user_id):
     groups = load_user_groups()
@@ -119,186 +127,383 @@ def set_user_group(user_id, group_id, group_name):
     groups[str(user_id)] = {"group_id": group_id, "group_name": group_name}
     save_user_groups(groups)
 
-# ========== НОРМАЛИЗАЦИЯ НАЗВАНИЙ ГРУПП ==========
-def normalize_group_name(name):
-    """
-    Нормализует название группы для поиска:
-    - Игнорирует регистр (заглавные/строчные буквы)
-    - Заменяет английские буквы на русские (T/t -> Т, B/b -> Б)
-    - Убирает тире, пробелы и другие разделители
-    """
-    # Приводим к нижнему регистру
-    name_lower = name.lower().strip()
-    
-    # Словарь замены английских букв на русские
-    replacements = {
-        't': 'т',
-        'b': 'б',
-        'tb': 'тб',
-        't b': 'тб'
-    }
-    
-    # Применяем замены
-    for eng, rus in replacements.items():
-        name_lower = name_lower.replace(eng, rus)
-    
-    # Убираем всё, кроме букв и цифр
-    name_lower = re.sub(r'[-\s\._]+', '', name_lower)
-    
-    # Удаляем возможные дублирующиеся буквы
-    name_lower = re.sub(r'([а-яё])\1+', r'\1', name_lower)
-    
-    return name_lower
+def load_user_selections():
+    return load_json_file(USER_SELECTIONS_FILE)
 
-# ========== СИСТЕМА ОТСЛЕЖИВАНИЯ ИЗМЕНЕНИЙ РАСПИСАНИЯ ==========
-def load_schedule_cache():
-    """Загружает кэш хешей расписания"""
-    try:
-        if os.path.exists(SCHEDULE_CACHE_FILE):
-            with open(SCHEDULE_CACHE_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-        return {}
-    except Exception as e:
-        print(f"Ошибка загрузки кэша: {e}")
-        return {}
+def save_user_selections(selections):
+    save_json_file(USER_SELECTIONS_FILE, selections)
 
-def save_schedule_cache(cache):
-    """Сохраняет кэш хешей расписания"""
-    try:
-        with open(SCHEDULE_CACHE_FILE, "w", encoding="utf-8") as f:
-            json.dump(cache, f, ensure_ascii=False, indent=2)
-    except Exception as e:
-        print(f"Ошибка сохранения кэша: {e}")
+def get_user_selection(user_id):
+    selections = load_user_selections()
+    return selections.get(str(user_id), {"type": None, "name": None, "id": None})
 
-def get_schedule_hash(group_id, date):
-    """Вычисляет хеш расписания для сравнения"""
-    data, error = fetch_schedule(group_id, date)
-    if error or not data:
-        return None
-    
-    lessons = data.get("data", {}).get("rasp", [])
-    # Создаём строку из всех занятий для хеширования
-    hash_string = ""
-    for lesson in lessons:
-        hash_string += f"{lesson.get('дата')}|{lesson.get('начало')}|{lesson.get('дисциплина')}|{lesson.get('преподаватель')}|{lesson.get('аудитория')}|"
-    
-    return hashlib.md5(hash_string.encode()).hexdigest()
+def set_user_selection(user_id, selection_type, name, id_val=None):
+    selections = load_user_selections()
+    selections[str(user_id)] = {"type": selection_type, "name": name, "id": id_val}
+    save_user_selections(selections)
 
-def check_and_notify_changes():
-    """Проверяет изменения в расписании и уведомляет пользователей"""
-    print("🔍 Проверка обновлений расписания...")
-    users = load_user_groups()
-    cache = load_schedule_cache()
-    changes_detected = False
-    notifications = {}  # {user_id: list of changes}
-    
-    today = datetime.now().strftime("%Y-%m-%d")
-    # Проверяем расписание на сегодня и следующие 7 дней
-    dates_to_check = [today]
-    for i in range(1, 8):
-        dates_to_check.append((datetime.now() + timedelta(days=i)).strftime("%Y-%m-%d"))
-    
-    for user_id, user_data in users.items():
-        group_id = user_data["group_id"]
-        group_name = user_data["group_name"]
-        user_changes = []
-        
-        for date in dates_to_check:
-            cache_key = f"{group_id}_{date}"
-            current_hash = get_schedule_hash(group_id, date)
-            
-            if current_hash is None:
-                continue
-            
-            if cache_key in cache:
-                old_hash = cache.get(cache_key)
-                if old_hash != current_hash:
-                    # Расписание изменилось!
-                    user_changes.append(date)
-                    cache[cache_key] = current_hash
-                    changes_detected = True
-            else:
-                # Первая проверка, просто сохраняем хеш
-                cache[cache_key] = current_hash
-        
-        if user_changes:
-            notifications[user_id] = {
-                "group_name": group_name,
-                "dates": user_changes
-            }
-    
-    if changes_detected:
-        save_schedule_cache(cache)
-        print(f"📢 Обнаружены изменения! Уведомляем {len(notifications)} пользователей")
-    
-    return notifications
+def clear_user_selection(user_id):
+    selections = load_user_selections()
+    if str(user_id) in selections:
+        del selections[str(user_id)]
+        save_user_selections(selections)
 
-def notify_users_about_changes(vk, notifications):
-    """Отправляет уведомления пользователям об изменениях"""
-    for user_id, data in notifications.items():
-        dates_str = ", ".join([datetime.strptime(d, "%Y-%m-%d").strftime("%d.%m") for d in data["dates"]])
-        message = (
-            f"🔄 *ВНИМАНИЕ! РАСПИСАНИЕ ИЗМЕНИЛОСЬ!*\n\n"
-            f"📌 Группа: `{data['group_name']}`\n"
-            f"📅 Изменения затронули: {dates_str}\n\n"
-            f"💡 Для получения актуального расписания нажмите:\n"
-            f"   • 📅 РАСПИСАНИЕ - на сегодня\n"
-            f"   • 📆 НЕДЕЛЯ - на текущую неделю"
-        )
-        try:
-            vk.messages.send(user_id=int(user_id), message=message, random_id=0)
-            print(f"✅ Уведомление отправлено пользователю {user_id}")
-        except Exception as e:
-            print(f"❌ Ошибка отправки уведомления {user_id}: {e}")
-
-def schedule_checker(vk):
-    """Фоновый поток для периодической проверки расписания"""
-    while True:
-        try:
-            # Проверяем каждые 6 часов (21600 секунд)
-            time.sleep(21600)
-            print("⏰ Запуск плановой проверки расписания...")
-            notifications = check_and_notify_changes()
-            if notifications:
-                notify_users_about_changes(vk, notifications)
-        except Exception as e:
-            print(f"❌ Ошибка в потоке проверки: {e}")
-
-def start_schedule_checker(vk):
-    """Запускает поток проверки расписания"""
-    checker_thread = threading.Thread(target=schedule_checker, args=(vk,), daemon=True)
-    checker_thread.start()
-    print("✅ Поток проверки расписания запущен (каждые 6 часов)")
-
-def get_last_check_time():
-    """Возвращает время последней проверки расписания"""
-    cache = load_schedule_cache()
-    return cache.get("_last_check", "Никогда")
-
-def update_last_check_time():
-    """Обновляет время последней проверки"""
-    cache = load_schedule_cache()
-    cache["_last_check"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    save_schedule_cache(cache)
-
-# ========== НАСТРОЙКИ ==========
-VK_TOKEN = "vk1.a.caFxSOtgxlqz1GOqzR5VUhDTxl6Yi7Nhz2-n5bJ3Za8RCAQKsweYPbQtZQRLKYlmWQhg_mPFQ9UKppanLGRKkVVEOmhXYnN9b4hpmJ3jmcrCvZhafBGhWEwR77FFR0OKR2tJi4x-AZ73hc6rr4R0N1iKkHwvqBxdoqJ3P21AHEHTT1Cf538JnbyCUcwAaH8OiIHC10p6nQRLrW6vPifD3Q"
-GROUP_ID = 238232620
-
+# ========== РАБОТА С API СПИСКОВ ==========
 API_BASE_URL = "https://stud.sssu.ru/api/Rasp"
 API_DATES_URL = "https://stud.sssu.ru/api/GetRaspDates"
 API_GROUPLIST_URL = "https://stud.sssu.ru/api/raspGrouplist"
+API_AUDITORIUMS_URL = "https://stud.sssu.ru/api/raspAudlist"
+API_TEACHERS_URL = "https://stud.sssu.ru/api/raspTeacherlist"
 API_YEARS_URL = "https://stud.sssu.ru/api/Rasp/ListYears"
 
-CACHE_TIMEOUT = 3600
-groups_cache = {"data": None, "timestamp": 0}
+# Кэш для списков
+groups_cache = {"data": None, "timestamp": 0, "year": None}
+auditoriums_cache = {"data": None, "timestamp": 0, "year": None}
+teachers_cache = {"data": None, "timestamp": 0, "year": None}
 years_cache = {"data": None, "timestamp": 0}
 current_year = None
 
-# ========== РАБОТА С УЧЕБНЫМИ ГОДАМИ ==========
+def get_all_groups(year=None):
+    if year is None:
+        year = get_current_academic_year()
+    current_time = datetime.now().timestamp()
+    if groups_cache["data"] and groups_cache["year"] == year:
+        if (current_time - groups_cache["timestamp"]) < 86400:  # 24 часа
+            return groups_cache["data"]
+    try:
+        response = requests.get(API_GROUPLIST_URL, params={"year": year}, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        if data.get("data"):
+            groups_cache["data"] = data["data"]
+            groups_cache["timestamp"] = current_time
+            groups_cache["year"] = year
+            print(f"✅ Загружены группы: {len(data['data'])} шт.")
+            return groups_cache["data"]
+        return []
+    except Exception as e:
+        print(f"❌ Ошибка загрузки групп: {e}")
+        return []
+
+def get_all_auditoriums(year=None):
+    if year is None:
+        year = get_current_academic_year()
+    current_time = datetime.now().timestamp()
+    if auditoriums_cache["data"] and auditoriums_cache["year"] == year:
+        if (current_time - auditoriums_cache["timestamp"]) < 86400:
+            return auditoriums_cache["data"]
+    try:
+        response = requests.get(API_AUDITORIUMS_URL, params={"year": year}, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        if data.get("data"):
+            auditoriums_cache["data"] = data["data"]
+            auditoriums_cache["timestamp"] = current_time
+            auditoriums_cache["year"] = year
+            print(f"✅ Загружены аудитории: {len(data['data'])} шт.")
+            return auditoriums_cache["data"]
+        return []
+    except Exception as e:
+        print(f"❌ Ошибка загрузки аудиторий: {e}")
+        return []
+
+def get_all_teachers(year=None):
+    if year is None:
+        year = get_current_academic_year()
+    current_time = datetime.now().timestamp()
+    if teachers_cache["data"] and teachers_cache["year"] == year:
+        if (current_time - teachers_cache["timestamp"]) < 86400:
+            return teachers_cache["data"]
+    try:
+        response = requests.get(API_TEACHERS_URL, params={"year": year}, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        if data.get("data"):
+            teachers_cache["data"] = data["data"]
+            teachers_cache["timestamp"] = current_time
+            teachers_cache["year"] = year
+            print(f"✅ Загружены преподаватели: {len(data['data'])} шт.")
+            return teachers_cache["data"]
+        return []
+    except Exception as e:
+        print(f"❌ Ошибка загрузки преподавателей: {e}")
+        return []
+
+def search_teachers_by_name(query):
+    """Поиск преподавателей по имени/фамилии (регистронезависимо)"""
+    teachers = get_all_teachers()
+    if not teachers:
+        return []
+    query_lower = query.lower().strip()
+    results = []
+    for teacher in teachers:
+        name = teacher.get("name", "")
+        if query_lower in name.lower():
+            results.append(teacher)
+    return results[:20]
+
+def search_auditoriums_by_name(query):
+    """Поиск аудиторий по названию"""
+    auditoriums = get_all_auditoriums()
+    if not auditoriums:
+        return []
+    query_lower = query.lower().strip()
+    results = []
+    for aud in auditoriums:
+        name = aud.get("name", "")
+        if query_lower in name.lower():
+            results.append(aud)
+    return results[:20]
+
+def get_teacher_by_name(teacher_name):
+    """Находит преподавателя по полному совпадению имени"""
+    teachers = get_all_teachers()
+    if not teachers:
+        return None
+    query_lower = teacher_name.lower().strip()
+    for teacher in teachers:
+        if teacher.get("name", "").lower() == query_lower:
+            return teacher
+    return None
+
+def get_auditorium_by_name(aud_name):
+    """Находит аудиторию по названию"""
+    auditoriums = get_all_auditoriums()
+    if not auditoriums:
+        return None
+    query_lower = aud_name.lower().strip()
+    for aud in auditoriums:
+        if aud.get("name", "").lower() == query_lower:
+            return aud
+    return None
+
+# ========== НОРМАЛИЗАЦИЯ НАЗВАНИЙ ГРУПП ==========
+def normalize_group_name(name):
+    name_lower = name.lower().strip()
+    name_lower = name_lower.replace('t', 'т')
+    name_lower = name_lower.replace('b', 'б')
+    name_lower = name_lower.replace('-', '')
+    name_lower = re.sub(r'\s+', '', name_lower)
+    name_lower = re.sub(r'([а-яё])\1+', r'\1', name_lower)
+    return name_lower
+
+# ========== ФУНКЦИИ РАБОТЫ С РАСПИСАНИЕМ ==========
+def fetch_schedule_by_group(group_id, date=None):
+    if date is None:
+        date = datetime.now().strftime("%Y-%m-%d")
+    try:
+        response = requests.get(API_BASE_URL, params={"idGroup": group_id, "sdate": date}, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        if data.get("state") != 1:
+            return None, f"Ошибка: {data.get('msg')}"
+        all_lessons = data.get("data", {}).get("rasp", [])
+        filtered = [l for l in all_lessons if l.get("дата", "")[:10] == date]
+        return filtered, None
+    except Exception as e:
+        return None, f"Ошибка: {e}"
+
+def fetch_schedule_by_teacher(teacher_id, date=None):
+    if date is None:
+        date = datetime.now().strftime("%Y-%m-%d")
+    try:
+        response = requests.get(API_BASE_URL, params={"idTeacher": teacher_id, "sdate": date}, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        if data.get("state") != 1:
+            return None, f"Ошибка: {data.get('msg')}"
+        all_lessons = data.get("data", {}).get("rasp", [])
+        filtered = [l for l in all_lessons if l.get("дата", "")[:10] == date]
+        return filtered, None
+    except Exception as e:
+        return None, f"Ошибка: {e}"
+
+def fetch_schedule_by_auditorium(auditorium_id, date=None):
+    if date is None:
+        date = datetime.now().strftime("%Y-%m-%d")
+    try:
+        response = requests.get(API_BASE_URL, params={"idAud": auditorium_id, "sdate": date}, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        if data.get("state") != 1:
+            return None, f"Ошибка: {data.get('msg')}"
+        all_lessons = data.get("data", {}).get("rasp", [])
+        filtered = [l for l in all_lessons if l.get("дата", "")[:10] == date]
+        return filtered, None
+    except Exception as e:
+        return None, f"Ошибка: {e}"
+
+def get_week_for_date(date_str):
+    date_obj = datetime.strptime(date_str, "%Y-%m-%d")
+    monday = date_obj - timedelta(days=date_obj.weekday())
+    sunday = monday + timedelta(days=6)
+    return monday.strftime("%Y-%m-%d"), sunday.strftime("%Y-%m-%d")
+
+def get_weekday_rus(weekday):
+    days = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"]
+    return days[weekday]
+
+def format_date_compact(date_str):
+    d = datetime.strptime(date_str, "%Y-%m-%d")
+    return d.strftime("%d.%m")
+
+def parse_lesson_type(discipline):
+    if discipline.startswith("лек "):
+        return "📖 ЛЕКЦИЯ", discipline[4:]
+    elif discipline.startswith("пр "):
+        return "💻 ПРАКТИКА", discipline[3:]
+    elif discipline.startswith("лаб "):
+        return "🔬 ЛАБОРАТОРНАЯ", discipline[4:]
+    else:
+        return "", discipline
+
+def format_lessons(lessons, title, date):
+    if not lessons:
+        return f"{title}\n📅 {date}\n\n❌ Занятий не найдено"
+    
+    date_obj = datetime.strptime(date, "%Y-%m-%d")
+    result = f"{title}\n📅 {date_obj.strftime('%d.%m.%Y')} ({get_weekday_rus(date_obj.weekday())})\n"
+    result += "=" * 35 + "\n\n"
+    
+    for lesson in sorted(lessons, key=lambda x: x.get("начало", "00:00")):
+        time_start = lesson.get("начало", "")
+        time_end = lesson.get("конец", "")
+        discipline = lesson.get("дисциплина", "")
+        teacher = lesson.get("преподаватель", "")
+        room = lesson.get("аудитория", "")
+        group = lesson.get("группа", "")
+        lesson_type, clean_discipline = parse_lesson_type(discipline)
+        
+        result += f"⏰ {time_start}–{time_end}\n"
+        if lesson_type:
+            result += f"{lesson_type}\n"
+        result += f"📚 {clean_discipline}\n"
+        result += f"👨‍🏫 {teacher}\n"
+        result += f"📍 ауд. {room}\n"
+        if group:
+            result += f"👥 Группа: {group}\n"
+        result += "-" * 35 + "\n"
+    
+    return result
+
+def format_week_schedule(lessons_by_date, title, start_date, end_date):
+    if not lessons_by_date:
+        start_obj = datetime.strptime(start_date, "%Y-%m-%d")
+        end_obj = datetime.strptime(end_date, "%Y-%m-%d")
+        return f"{title}\n📆 {start_obj.strftime('%d.%m')} – {end_obj.strftime('%d.%m.%Y')}\n\n❌ Занятий не найдено"
+    
+    start_obj = datetime.strptime(start_date, "%Y-%m-%d")
+    end_obj = datetime.strptime(end_date, "%Y-%m-%d")
+    result = f"{title}\n📆 {start_obj.strftime('%d.%m')} – {end_obj.strftime('%d.%m.%Y')}\n"
+    result += "=" * 40 + "\n\n"
+    
+    for date, lessons in sorted(lessons_by_date.items()):
+        if not lessons:
+            continue
+        date_obj = datetime.strptime(date, "%Y-%m-%d")
+        weekday = get_weekday_rus(date_obj.weekday())
+        date_short = date_obj.strftime("%d.%m")
+        result += f"📌 {weekday.upper()} ({date_short})\n"
+        result += "─" * 35 + "\n"
+        
+        for lesson in sorted(lessons, key=lambda x: x.get("начало", "00:00")):
+            time_start = lesson.get("начало", "")
+            time_end = lesson.get("конец", "")
+            discipline = lesson.get("дисциплина", "")
+            teacher = lesson.get("преподаватель", "")
+            room = lesson.get("аудитория", "")
+            group = lesson.get("группа", "")
+            lesson_type, clean_discipline = parse_lesson_type(discipline)
+            result += f"⏰ {time_start}–{time_end}"
+            if lesson_type:
+                result += f"  {lesson_type.split()[1] if len(lesson_type.split()) > 1 else lesson_type}"
+            result += f"\n   📚 {clean_discipline}\n"
+            result += f"   👨‍🏫 {teacher}  |  🏫 {room}\n"
+            if group:
+                result += f"   👥 {group}\n"
+            result += "\n"
+        result += "\n"
+    
+    return result
+
+def get_schedule_for_group_week(group_id, target_date):
+    start_date, end_date = get_week_for_date(target_date)
+    lessons_by_date = {}
+    current_date = datetime.strptime(start_date, "%Y-%m-%d")
+    end_date_obj = datetime.strptime(end_date, "%Y-%m-%d")
+    
+    while current_date <= end_date_obj:
+        date_str = current_date.strftime("%Y-%m-%d")
+        lessons, error = fetch_schedule_by_group(group_id, date_str)
+        if lessons:
+            lessons_by_date[date_str] = lessons
+        current_date += timedelta(days=1)
+    
+    group_name = get_group_name_by_id(group_id)
+    title = f"📅 РАСПИСАНИЕ ГРУППЫ {group_name}"
+    return format_week_schedule(lessons_by_date, title, start_date, end_date)
+
+def get_schedule_for_teacher_week(teacher_id, teacher_name, target_date):
+    start_date, end_date = get_week_for_date(target_date)
+    lessons_by_date = {}
+    current_date = datetime.strptime(start_date, "%Y-%m-%d")
+    end_date_obj = datetime.strptime(end_date, "%Y-%m-%d")
+    
+    while current_date <= end_date_obj:
+        date_str = current_date.strftime("%Y-%m-%d")
+        lessons, error = fetch_schedule_by_teacher(teacher_id, date_str)
+        if lessons:
+            lessons_by_date[date_str] = lessons
+        current_date += timedelta(days=1)
+    
+    title = f"👨‍🏫 РАСПИСАНИЕ ПРЕПОДАВАТЕЛЯ {teacher_name}"
+    return format_week_schedule(lessons_by_date, title, start_date, end_date)
+
+def get_schedule_for_auditorium_week(auditorium_id, auditorium_name, target_date):
+    start_date, end_date = get_week_for_date(target_date)
+    lessons_by_date = {}
+    current_date = datetime.strptime(start_date, "%Y-%m-%d")
+    end_date_obj = datetime.strptime(end_date, "%Y-%m-%d")
+    
+    while current_date <= end_date_obj:
+        date_str = current_date.strftime("%Y-%m-%d")
+        lessons, error = fetch_schedule_by_auditorium(auditorium_id, date_str)
+        if lessons:
+            lessons_by_date[date_str] = lessons
+        current_date += timedelta(days=1)
+    
+    title = f"🏫 РАСПИСАНИЕ АУДИТОРИИ {auditorium_name}"
+    return format_week_schedule(lessons_by_date, title, start_date, end_date)
+
+def get_schedule_for_group_today(group_id):
+    today = datetime.now().strftime("%Y-%m-%d")
+    lessons, error = fetch_schedule_by_group(group_id, today)
+    if error:
+        return error
+    group_name = get_group_name_by_id(group_id)
+    title = f"📅 РАСПИСАНИЕ ГРУППЫ {group_name}"
+    return format_lessons(lessons, title, today)
+
+def get_schedule_for_teacher_today(teacher_id, teacher_name):
+    today = datetime.now().strftime("%Y-%m-%d")
+    lessons, error = fetch_schedule_by_teacher(teacher_id, today)
+    if error:
+        return error
+    title = f"👨‍🏫 РАСПИСАНИЕ ПРЕПОДАВАТЕЛЯ {teacher_name}"
+    return format_lessons(lessons, title, today)
+
+def get_schedule_for_auditorium_today(auditorium_id, auditorium_name):
+    today = datetime.now().strftime("%Y-%m-%d")
+    lessons, error = fetch_schedule_by_auditorium(auditorium_id, today)
+    if error:
+        return error
+    title = f"🏫 РАСПИСАНИЕ АУДИТОРИИ {auditorium_name}"
+    return format_lessons(lessons, title, today)
+
+# ========== ФУНКЦИИ ДЛЯ ГРУПП ==========
 def get_available_years():
     current_time = datetime.now().timestamp()
-    if years_cache["data"] and (current_time - years_cache["timestamp"]) < CACHE_TIMEOUT:
+    if years_cache["data"] and (current_time - years_cache["timestamp"]) < 3600:
         return years_cache["data"]
     try:
         response = requests.get(API_YEARS_URL, timeout=10)
@@ -336,63 +541,16 @@ def get_current_academic_year():
     print(f"📅 Текущий год: {current_year}")
     return current_year
 
-# ========== РАБОТА СО СПИСКОМ ГРУПП ==========
-def get_all_groups(year=None):
-    if year is None:
-        year = get_current_academic_year()
-    current_time = datetime.now().timestamp()
-    if groups_cache["data"] and groups_cache.get("year") == year:
-        if (current_time - groups_cache["timestamp"]) < CACHE_TIMEOUT:
-            return groups_cache["data"]
-    try:
-        response = requests.get(API_GROUPLIST_URL, params={"year": year}, timeout=10)
-        response.raise_for_status()
-        data = response.json()
-        if data.get("data"):
-            groups_cache["data"] = data["data"]
-            groups_cache["timestamp"] = current_time
-            groups_cache["year"] = year
-            print(f"✅ Список групп: {len(data['data'])}")
-            return groups_cache["data"]
-        return []
-    except Exception as e:
-        print(f"❌ Ошибка: {e}")
-        return []
-
 def find_group_by_name(search_name, year=None):
     all_groups = get_all_groups(year)
     if not all_groups:
-        return None, None, []
-    
-    # Нормализуем поисковый запрос
+        return None, None
     normalized_search = normalize_group_name(search_name)
-    
-    # Точное совпадение после нормализации
     for group in all_groups:
         normalized_group = normalize_group_name(group["name"])
         if normalized_group == normalized_search:
-            return group["id"], group["name"], []
-    
-    # Частичное совпадение (начинается с)
-    for group in all_groups:
-        normalized_group = normalize_group_name(group["name"])
-        if normalized_group.startswith(normalized_search):
-            return group["id"], group["name"], []
-    
-    # Поиск похожих названий
-    all_names_normalized = [normalize_group_name(g["name"]) for g in all_groups]
-    all_names_original = [g["name"] for g in all_groups]
-    
-    matches = difflib.get_close_matches(normalized_search, all_names_normalized, n=5, cutoff=0.6)
-    original_matches = []
-    for match_lower in matches:
-        try:
-            index = all_names_normalized.index(match_lower)
-            original_matches.append(all_names_original[index])
-        except ValueError:
-            continue
-    
-    return None, None, original_matches
+            return group["id"], group["name"]
+    return None, None
 
 def get_group_name_by_id(group_id, year=None):
     all_groups = get_all_groups(year)
@@ -401,314 +559,94 @@ def get_group_name_by_id(group_id, year=None):
             return group["name"]
     return None
 
-def get_all_groups_list(page=1, per_page=20):
-    all_groups = get_all_groups()
-    if not all_groups:
-        return []
-    sorted_groups = sorted(all_groups, key=lambda x: x["name"])
-    start = (page - 1) * per_page
-    end = start + per_page
-    return sorted_groups[start:end]
-
-def search_groups_by_keyword(keyword):
-    all_groups = get_all_groups()
-    if not all_groups:
-        return []
-    
-    # Нормализуем ключевое слово
-    keyword_normalized = normalize_group_name(keyword)
-    
-    results = []
-    for group in all_groups:
-        group_normalized = normalize_group_name(group["name"])
-        # Ищем частичное совпадение
-        if keyword_normalized in group_normalized:
-            results.append(group)
-        # Также ищем по оригинальному названию
-        elif keyword.lower() in group["name"].lower():
-            if group not in results:
-                results.append(group)
-    
-    return sorted(results, key=lambda x: x["name"])
-
-def get_groups_list_message(page=1):
-    groups = get_all_groups_list(page=page, per_page=20)
+def get_groups_list_message(page=1, per_page=20):
+    groups = get_all_groups()
     if not groups:
         return "❌ Не удалось загрузить список групп"
-    total_groups = len(get_all_groups())
-    total_pages = (total_groups + 19) // 20
+    total_pages = (len(groups) + per_page - 1) // per_page
+    start = (page - 1) * per_page
+    end = start + per_page
     result = f"📚 СПИСОК ГРУПП (страница {page}/{total_pages})\n"
     result += "=" * 35 + "\n\n"
-    for group in groups:
+    for group in groups[start:end]:
         result += f"📌 {group['name']}\n"
-        result += f"   🏫 {group.get('facul', 'Факультет не указан')} | 📚 {group.get('kurs', '?')} курс\n\n"
-    result += f"💡 Чтобы выбрать группу, напишите: `выбрать {groups[0]['name'] if groups else ''}`"
+    result += f"\n💡 Напишите `выбрать [название группы]`"
     return result
 
 def search_groups_message(keyword):
-    results = search_groups_by_keyword(keyword)
+    all_groups = get_all_groups()
+    if not all_groups:
+        return "❌ Не удалось загрузить список групп"
+    keyword_lower = keyword.lower().strip()
+    results = []
+    for group in all_groups:
+        if keyword_lower in group["name"].lower():
+            results.append(group)
     if not results:
         return f"❌ Группы по запросу `{keyword}` не найдены"
-    result = f"🔍 РЕЗУЛЬТАТЫ ПОИСКА: `{keyword}`\n"
-    result += f"📚 Найдено групп: {len(results)}\n"
+    result = f"🔍 РЕЗУЛЬТАТЫ ПОИСКА: `{keyword}`\n📚 Найдено: {len(results)}\n"
     result += "=" * 35 + "\n\n"
     for group in results[:20]:
         result += f"📌 {group['name']}\n"
-        result += f"   🏫 {group.get('facul', 'Факультет не указан')} | 📚 {group.get('kurs', '?')} курс\n\n"
     if len(results) > 20:
         result += f"\n... и ещё {len(results) - 20} групп"
-    result += f"\n💡 Чтобы выбрать группу, напишите: `выбрать {results[0]['name']}`"
+    result += f"\n💡 Напишите `выбрать [название]` для выбора группы"
     return result
 
-# ========== РАБОТА С РАСПИСАНИЕМ ==========
-def fetch_available_dates(group_id):
-    try:
-        response = requests.get(API_DATES_URL, params={"idGroup": group_id}, timeout=10)
-        response.raise_for_status()
-        data = response.json()
-        if data.get("state") == 1:
-            return data.get("data", {}).get("dates", [])
-        return []
-    except Exception as e:
-        print(f"Ошибка: {e}")
-        return []
-
-def has_lessons_on_date(group_id, date):
-    dates = fetch_available_dates(group_id)
-    return date in dates
-
-def get_next_lesson_date(group_id, from_date=None):
-    if from_date is None:
-        from_date = datetime.now().strftime("%Y-%m-%d")
-    dates = fetch_available_dates(group_id)
-    for date in sorted(dates):
-        if date >= from_date:
-            return date
-    return None
-
-def fetch_schedule(group_id, date):
-    try:
-        response = requests.get(API_BASE_URL, params={"idGroup": group_id, "sdate": date}, timeout=10)
-        response.raise_for_status()
-        data = response.json()
-        if data.get("state") != 1:
-            return None, f"❌ Ошибка: {data.get('msg')}"
-        all_lessons = data.get("data", {}).get("rasp", [])
-        filtered = [l for l in all_lessons if l.get("дата", "")[:10] == date]
-        return {"data": {"rasp": filtered, "info": data.get("data", {}).get("info", {})}}, None
-    except Exception as e:
-        return None, f"❌ Ошибка: {e}"
-
-def get_weekday_rus(weekday):
-    days = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"]
-    return days[weekday]
-
-def format_date_compact(date_str):
-    d = datetime.strptime(date_str, "%Y-%m-%d")
-    return d.strftime("%d.%m")
-
-def parse_lesson_type(discipline):
-    if discipline.startswith("лек "):
-        return "📖 ЛЕКЦИЯ", discipline[4:]
-    elif discipline.startswith("пр "):
-        return "💻 ПРАКТИКА", discipline[3:]
-    elif discipline.startswith("лаб "):
-        return "🔬 ЛАБОРАТОРНАЯ", discipline[4:]
-    else:
-        return "", discipline
-
-def parse_schedule_data(data, date, group_name=""):
-    rasp_list = data.get("data", {}).get("rasp", [])
-    if not rasp_list:
-        return f"📭 На {date} занятий нет"
-    date_obj = datetime.strptime(date, "%Y-%m-%d")
-    date_str_rus = date_obj.strftime("%d.%m.%Y")
-    weekday = get_weekday_rus(date_obj.weekday())
-    result = f"📅 РАСПИСАНИЕ НА {date_str_rus} ({weekday})\n"
+# ========== ФУНКЦИИ ДЛЯ АУДИТОРИЙ ==========
+def get_auditoriums_list_message(page=1, per_page=20):
+    auditoriums = get_all_auditoriums()
+    if not auditoriums:
+        return "❌ Не удалось загрузить список аудиторий"
+    total_pages = (len(auditoriums) + per_page - 1) // per_page
+    start = (page - 1) * per_page
+    end = start + per_page
+    result = f"🏫 СПИСОК АУДИТОРИЙ (страница {page}/{total_pages})\n"
     result += "=" * 35 + "\n\n"
-    for lesson in rasp_list:
-        time_start = lesson.get("начало", "")
-        time_end = lesson.get("конец", "")
-        discipline = lesson.get("дисциплина", "")
-        teacher = lesson.get("преподаватель", "")
-        room = lesson.get("аудитория", "")
-        lesson_type, clean_discipline = parse_lesson_type(discipline)
-        result += f"⏰ {time_start}–{time_end}\n"
-        if lesson_type:
-            result += f"{lesson_type}\n"
-        result += f"📚 {clean_discipline}\n"
-        result += f"👨‍🏫 {teacher}\n"
-        result += f"📍 ауд. {room}\n"
-        result += "-" * 35 + "\n"
-    if group_name:
-        result += f"\n👥 Группа: {group_name}"
-    
-    # Добавляем время последней проверки
-    last_check = get_last_check_time()
-    result += f"\n🕐 Последняя проверка обновлений: {last_check}"
+    for aud in auditoriums[start:end]:
+        result += f"📌 {aud['name']}\n"
+    result += f"\n💡 Напишите `аудитория [номер]` для просмотра расписания"
     return result
 
-# ========== ОСНОВНЫЕ ФУНКЦИИ РАСПИСАНИЯ ==========
-def get_schedule(group_id, date):
-    if not has_lessons_on_date(group_id, date):
-        return f"📭 На {format_date_compact(date)} занятий нет\n\n🕐 Последняя проверка обновлений: {get_last_check_time()}"
-    data, error = fetch_schedule(group_id, date)
-    if error:
-        return error
-    group_name = get_group_name_by_id(group_id)
-    
-    # Обновляем кэш хеша при просмотре расписания
-    cache_key = f"{group_id}_{date}"
-    cache = load_schedule_cache()
-    current_hash = get_schedule_hash(group_id, date)
-    if current_hash:
-        cache[cache_key] = current_hash
-        save_schedule_cache(cache)
-    
-    return parse_schedule_data(data, date, group_name)
-
-def get_schedule_for_today(group_id):
-    return get_schedule(group_id, datetime.now().strftime("%Y-%m-%d"))
-
-def get_schedule_for_tomorrow(group_id):
-    return get_schedule(group_id, (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d"))
-
-def get_next_weekday(target_weekday):
-    today = datetime.now()
-    days_ahead = target_weekday - today.weekday()
-    if days_ahead <= 0:
-        days_ahead += 7
-    return (today + timedelta(days=days_ahead)).strftime("%Y-%m-%d")
-
-def get_next_lesson(group_id):
-    next_date = get_next_lesson_date(group_id)
-    if not next_date:
-        return "📭 Ближайших занятий не найдено"
-    data, error = fetch_schedule(group_id, next_date)
-    if error:
-        return error
-    rasp_list = data.get("data", {}).get("rasp", [])
-    if not rasp_list:
-        return "📭 Нет данных о занятиях"
-    first_lesson = rasp_list[0]
-    time_start = first_lesson.get("начало", "")
-    discipline = first_lesson.get("дисциплина", "")
-    teacher = first_lesson.get("преподаватель", "")
-    room = first_lesson.get("аудитория", "")
-    lesson_type, clean_discipline = parse_lesson_type(discipline)
-    date_str = format_date_compact(next_date)
-    weekday = get_weekday_rus(datetime.strptime(next_date, "%Y-%m-%d").weekday())
-    result = f"🎯 БЛИЖАЙШЕЕ ЗАНЯТИЕ\n📅 {date_str} ({weekday})\n⏰ {time_start}\n"
-    if lesson_type:
-        result += f"{lesson_type}\n"
-    result += f"📚 {clean_discipline}\n👨‍🏫 {teacher}\n📍 ауд. {room}"
+def search_auditoriums_message(keyword):
+    results = search_auditoriums_by_name(keyword)
+    if not results:
+        return f"❌ Аудитории по запросу `{keyword}` не найдены"
+    result = f"🔍 РЕЗУЛЬТАТЫ ПОИСКА АУДИТОРИЙ: `{keyword}`\n📚 Найдено: {len(results)}\n"
+    result += "=" * 35 + "\n\n"
+    for aud in results[:20]:
+        result += f"📌 {aud['name']}\n"
+    if len(results) > 20:
+        result += f"\n... и ещё {len(results) - 20} аудиторий"
+    result += f"\n💡 Напишите `аудитория [номер]` для просмотра расписания"
     return result
 
-def get_current_week_range():
-    today = datetime.now()
-    monday = today - timedelta(days=today.weekday())
-    sunday = monday + timedelta(days=6)
-    return monday.strftime("%Y-%m-%d"), sunday.strftime("%Y-%m-%d")
-
-def get_next_week_range():
-    today = datetime.now()
-    current_monday = today - timedelta(days=today.weekday())
-    next_monday = current_monday + timedelta(days=7)
-    next_sunday = next_monday + timedelta(days=6)
-    return next_monday.strftime("%Y-%m-%d"), next_sunday.strftime("%Y-%m-%d")
-
-def get_schedule_for_current_week(group_id):
-    start_date, end_date = get_current_week_range()
-    all_dates = fetch_available_dates(group_id)
-    target_dates = sorted([d for d in all_dates if start_date <= d <= end_date])
-    if not target_dates:
-        start_obj = datetime.strptime(start_date, "%Y-%m-%d")
-        end_obj = datetime.strptime(end_date, "%Y-%m-%d")
-        return f"📭 На текущей неделе ({start_obj.strftime('%d.%m')}–{end_obj.strftime('%d.%m')}) занятий нет\n\n🕐 Последняя проверка обновлений: {get_last_check_time()}"
-    start_obj = datetime.strptime(start_date, "%Y-%m-%d")
-    end_obj = datetime.strptime(end_date, "%Y-%m-%d")
-    result = f"📅 РАСПИСАНИЕ НА ТЕКУЩУЮ НЕДЕЛЮ\n📆 {start_obj.strftime('%d.%m')} – {end_obj.strftime('%d.%m.%Y')}\n" + "=" * 40 + "\n\n"
-    for date in target_dates:
-        data, error = fetch_schedule(group_id, date)
-        if error or not data:
-            continue
-        rasp_list = data.get("data", {}).get("rasp", [])
-        if not rasp_list:
-            continue
-        date_obj = datetime.strptime(date, "%Y-%m-%d")
-        weekday = get_weekday_rus(date_obj.weekday())
-        date_short = date_obj.strftime("%d.%m")
-        result += f"📌 {weekday.upper()} ({date_short})\n" + "─" * 35 + "\n"
-        for lesson in sorted(rasp_list, key=lambda x: x.get("начало", "00:00")):
-            time_start = lesson.get("начало", "")
-            time_end = lesson.get("конец", "")
-            discipline = lesson.get("дисциплина", "")
-            teacher = lesson.get("преподаватель", "")
-            room = lesson.get("аудитория", "")
-            clean_discipline = discipline
-            lesson_type_short = ""
-            if discipline.startswith("лек "):
-                clean_discipline = discipline[4:]
-                lesson_type_short = "ЛЕК"
-            elif discipline.startswith("пр "):
-                clean_discipline = discipline[3:]
-                lesson_type_short = "ПРАК"
-            elif discipline.startswith("лаб "):
-                clean_discipline = discipline[4:]
-                lesson_type_short = "ЛАБ"
-            result += f"⏰ {time_start}–{time_end}"
-            if lesson_type_short:
-                result += f"  [{lesson_type_short}]"
-            result += f"\n   📚 {clean_discipline}\n   👨‍🏫 {teacher}  |  🏫 {room}\n\n"
-        result += "\n"
-    result += f"\n🕐 Последняя проверка обновлений: {get_last_check_time()}"
+# ========== ФУНКЦИИ ДЛЯ ПРЕПОДАВАТЕЛЕЙ ==========
+def get_teachers_list_message(page=1, per_page=20):
+    teachers = get_all_teachers()
+    if not teachers:
+        return "❌ Не удалось загрузить список преподавателей"
+    total_pages = (len(teachers) + per_page - 1) // per_page
+    start = (page - 1) * per_page
+    end = start + per_page
+    result = f"👨‍🏫 СПИСОК ПРЕПОДАВАТЕЛЕЙ (страница {page}/{total_pages})\n"
+    result += "=" * 35 + "\n\n"
+    for teacher in teachers[start:end]:
+        result += f"📌 {teacher['name']}\n"
+    result += f"\n💡 Напишите `преподаватель [фамилия]` для просмотра расписания"
     return result
 
-def get_schedule_for_next_week(group_id):
-    start_date, end_date = get_next_week_range()
-    all_dates = fetch_available_dates(group_id)
-    target_dates = sorted([d for d in all_dates if start_date <= d <= end_date])
-    if not target_dates:
-        start_obj = datetime.strptime(start_date, "%Y-%m-%d")
-        end_obj = datetime.strptime(end_date, "%Y-%m-%d")
-        return f"📭 На следующей неделе ({start_obj.strftime('%d.%m')}–{end_obj.strftime('%d.%m')}) занятий нет\n\n🕐 Последняя проверка обновлений: {get_last_check_time()}"
-    start_obj = datetime.strptime(start_date, "%Y-%m-%d")
-    end_obj = datetime.strptime(end_date, "%Y-%m-%d")
-    result = f"📅 РАСПИСАНИЕ НА СЛЕДУЮЩУЮ НЕДЕЛЮ\n📆 {start_obj.strftime('%d.%m')} – {end_obj.strftime('%d.%m.%Y')}\n" + "=" * 40 + "\n\n"
-    for date in target_dates:
-        data, error = fetch_schedule(group_id, date)
-        if error or not data:
-            continue
-        rasp_list = data.get("data", {}).get("rasp", [])
-        if not rasp_list:
-            continue
-        date_obj = datetime.strptime(date, "%Y-%m-%d")
-        weekday = get_weekday_rus(date_obj.weekday())
-        date_short = date_obj.strftime("%d.%m")
-        result += f"📌 {weekday.upper()} ({date_short})\n" + "─" * 35 + "\n"
-        for lesson in sorted(rasp_list, key=lambda x: x.get("начало", "00:00")):
-            time_start = lesson.get("начало", "")
-            time_end = lesson.get("конец", "")
-            discipline = lesson.get("дисциплина", "")
-            teacher = lesson.get("преподаватель", "")
-            room = lesson.get("аудитория", "")
-            clean_discipline = discipline
-            lesson_type_short = ""
-            if discipline.startswith("лек "):
-                clean_discipline = discipline[4:]
-                lesson_type_short = "ЛЕК"
-            elif discipline.startswith("пр "):
-                clean_discipline = discipline[3:]
-                lesson_type_short = "ПРАК"
-            elif discipline.startswith("лаб "):
-                clean_discipline = discipline[4:]
-                lesson_type_short = "ЛАБ"
-            result += f"⏰ {time_start}–{time_end}"
-            if lesson_type_short:
-                result += f"  [{lesson_type_short}]"
-            result += f"\n   📚 {clean_discipline}\n   👨‍🏫 {teacher}  |  🏫 {room}\n\n"
-        result += "\n"
-    result += f"\n🕐 Последняя проверка обновлений: {get_last_check_time()}"
+def search_teachers_message(keyword):
+    results = search_teachers_by_name(keyword)
+    if not results:
+        return f"❌ Преподаватели по запросу `{keyword}` не найдены"
+    result = f"🔍 РЕЗУЛЬТАТЫ ПОИСКА ПРЕПОДАВАТЕЛЕЙ: `{keyword}`\n📚 Найдено: {len(results)}\n"
+    result += "=" * 35 + "\n\n"
+    for teacher in results[:20]:
+        result += f"📌 {teacher['name']}\n"
+    if len(results) > 20:
+        result += f"\n... и ещё {len(results) - 20} преподавателей"
+    result += f"\n💡 Напишите `преподаватель [фамилия]` для просмотра расписания"
     return result
 
 # ========== ПРОВЕРКА СТАТУСА САЙТА ==========
@@ -768,10 +706,82 @@ def get_status_message():
     else:
         result += "   • Всё работает, можно пользоваться!\n"
     result += f"\n🕐 Проверено: {datetime.now().strftime('%H:%M:%S')}"
-    result += f"\n🕐 Последняя проверка обновлений расписания: {get_last_check_time()}"
     return result
 
-# ========== КЛАВИАТУРЫ ДЛЯ КНОПОК ==========
+# ========== СИСТЕМА ОТСЛЕЖИВАНИЯ ИЗМЕНЕНИЙ ==========
+def get_schedule_hash(group_id, date):
+    lessons, error = fetch_schedule_by_group(group_id, date)
+    if error or not lessons:
+        return None
+    hash_string = ""
+    for lesson in lessons:
+        hash_string += f"{lesson.get('дата')}|{lesson.get('начало')}|{lesson.get('дисциплина')}|{lesson.get('преподаватель')}|{lesson.get('аудитория')}|"
+    return hashlib.md5(hash_string.encode()).hexdigest()
+
+def check_and_notify_changes(vk):
+    print("🔍 Проверка обновлений расписания...")
+    users = load_user_groups()
+    cache = load_json_file(SCHEDULE_CACHE_FILE)
+    changes_detected = False
+    notifications = {}
+    today = datetime.now().strftime("%Y-%m-%d")
+    dates_to_check = [today] + [(datetime.now() + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(1, 8)]
+    
+    for user_id, user_data in users.items():
+        group_id = user_data["group_id"]
+        group_name = user_data["group_name"]
+        user_changes = []
+        for date in dates_to_check:
+            cache_key = f"{group_id}_{date}"
+            current_hash = get_schedule_hash(group_id, date)
+            if current_hash is None:
+                continue
+            if cache_key in cache:
+                if cache[cache_key] != current_hash:
+                    user_changes.append(date)
+                    cache[cache_key] = current_hash
+                    changes_detected = True
+            else:
+                cache[cache_key] = current_hash
+        if user_changes:
+            notifications[user_id] = {"group_name": group_name, "dates": user_changes}
+    
+    if changes_detected:
+        save_json_file(SCHEDULE_CACHE_FILE, cache)
+        for user_id, data in notifications.items():
+            dates_str = ", ".join([datetime.strptime(d, "%Y-%m-%d").strftime("%d.%m") for d in data["dates"]])
+            message = (
+                f"🔄 *ВНИМАНИЕ! РАСПИСАНИЕ ИЗМЕНИЛОСЬ!*\n\n"
+                f"📌 Группа: `{data['group_name']}`\n"
+                f"📅 Изменения затронули: {dates_str}\n\n"
+                f"💡 Для получения актуального расписания нажмите:\n"
+                f"   • 📅 РАСПИСАНИЕ - на сегодня\n"
+                f"   • 📆 НЕДЕЛЯ - на текущую неделю"
+            )
+            try:
+                vk.messages.send(user_id=int(user_id), message=message, random_id=0)
+                print(f"✅ Уведомление отправлено пользователю {user_id}")
+            except Exception as e:
+                print(f"❌ Ошибка отправки уведомления {user_id}: {e}")
+
+def schedule_checker(vk):
+    while True:
+        try:
+            time.sleep(21600)  # 6 часов
+            check_and_notify_changes(vk)
+        except Exception as e:
+            print(f"❌ Ошибка в потоке проверки: {e}")
+
+def start_schedule_checker(vk):
+    checker_thread = threading.Thread(target=schedule_checker, args=(vk,), daemon=True)
+    checker_thread.start()
+    print("✅ Поток проверки расписания запущен (каждые 6 часов)")
+
+# ========== НАСТРОЙКИ ==========
+VK_TOKEN = "vk1.a.caFxSOtgxlqz1GOqzR5VUhDTxl6Yi7Nhz2-n5bJ3Za8RCAQKsweYPbQtZQRLKYlmWQhg_mPFQ9UKppanLGRKkVVEOmhXYnN9b4hpmJ3jmcrCvZhafBGhWEwR77FFR0OKR2tJi4x-AZ73hc6rr4R0N1iKkHwvqBxdoqJ3P21AHEHTT1Cf538JnbyCUcwAaH8OiIHC10p6nQRLrW6vPifD3Q"
+GROUP_ID = 238232620
+
+# ========== КЛАВИАТУРЫ ==========
 def get_main_keyboard(user_has_group=False):
     keyboard = {"one_time": False, "buttons": []}
     if user_has_group:
@@ -779,130 +789,215 @@ def get_main_keyboard(user_has_group=False):
             [{"action": {"type": "text", "label": "📅 РАСПИСАНИЕ"}}, {"action": {"type": "text", "label": "📆 НЕДЕЛЯ"}}],
             [{"action": {"type": "text", "label": "⏩ СЛЕДУЮЩАЯ НЕДЕЛЯ"}}, {"action": {"type": "text", "label": "🎯 БЛИЖАЙШЕЕ"}}],
             [{"action": {"type": "text", "label": "🏫 МОЯ ГРУППА"}}, {"action": {"type": "text", "label": "📚 ВСЕ ГРУППЫ"}}],
-            [{"action": {"type": "text", "label": "🖥️ СТАТУС САЙТА"}}, {"action": {"type": "text", "label": "❓ ПОМОЩЬ"}}]
+            [{"action": {"type": "text", "label": "👨‍🏫 ПРЕПОДАВАТЕЛИ"}}, {"action": {"type": "text", "label": "🏢 АУДИТОРИИ"}}],
+            [{"action": {"type": "text", "label": "🖥️ СТАТУС САЙТА"}}, {"action": {"type": "text", "label": "❓ ПОМОЩЬ"}}],
+            [{"action": {"type": "text", "label": "🗑️ СБРОСИТЬ ВЫБОР"}}]
         ]
     else:
         keyboard["buttons"] = [
             [{"action": {"type": "text", "label": "📚 ВЫБРАТЬ ГРУППУ"}}, {"action": {"type": "text", "label": "🔍 ПОИСК ГРУППЫ"}}],
+            [{"action": {"type": "text", "label": "👨‍🏫 ПРЕПОДАВАТЕЛИ"}}, {"action": {"type": "text", "label": "🏢 АУДИТОРИИ"}}],
             [{"action": {"type": "text", "label": "📋 ВСЕ ГРУППЫ"}}, {"action": {"type": "text", "label": "🖥️ СТАТУС САЙТА"}}],
             [{"action": {"type": "text", "label": "❓ ПОМОЩЬ"}}]
         ]
     return keyboard
 
+def get_back_keyboard():
+    return {"one_time": False, "buttons": [[{"action": {"type": "text", "label": "◀️ НАЗАД"}}]]}
+
 def get_search_keyboard():
     return {"one_time": True, "buttons": [[{"action": {"type": "text", "label": "❌ ОТМЕНА"}}]]}
-
-def get_after_select_keyboard(group_name):
-    return {
-        "one_time": False,
-        "buttons": [
-            [{"action": {"type": "text", "label": "✅ ДА, ЭТА ГРУППА"}}, {"action": {"type": "text", "label": "🔍 ВЫБРАТЬ ДРУГУЮ"}}],
-            [{"action": {"type": "text", "label": "❌ ОТМЕНА"}}]
-        ]
-    }
 
 def send_keyboard(vk, peer_id, message, keyboard):
     vk.messages.send(peer_id=peer_id, message=message, random_id=0, keyboard=json.dumps(keyboard, ensure_ascii=False))
 
-def send_message(vk, peer_id, message):
-    vk.messages.send(peer_id=peer_id, message=message, random_id=0)
-
-# ========== ОБРАБОТЧИК КОМАНД ==========
+# ========== ОБРАБОТЧИК ==========
 user_states = {}
 
 def handle_message(text, user_id, peer_id, from_chat, vk):
     text_lower = text.lower().strip()
     user_id_str = str(user_id)
+    current_selection = get_user_selection(user_id)
     
-    # Состояния (диалоги)
+    # Кнопка НАЗАД
+    if text == "◀️ НАЗАД":
+        clear_user_selection(user_id)
+        user_group = get_user_group(user_id)
+        send_keyboard(vk, peer_id, "🔙 Вы вернулись в главное меню", get_main_keyboard(user_has_group=bool(user_group)))
+        return
+    
+    # Кнопка СБРОСИТЬ ВЫБОР
+    if text == "🗑️ СБРОСИТЬ ВЫБОР":
+        clear_user_selection(user_id)
+        user_group = get_user_group(user_id)
+        send_keyboard(vk, peer_id, "🗑️ Выбор сброшен. Теперь кнопки показывают расписание вашей группы.", get_main_keyboard(user_has_group=bool(user_group)))
+        return
+    
+    # Состояния
     if user_id_str in user_states:
         state = user_states[user_id_str]
-        if state.get("mode") == "search_groups":
-            keyword = text.strip()
-            if keyword:
-                results = search_groups_by_keyword(keyword)
-                if results:
-                    message = f"🔍 РЕЗУЛЬТАТЫ ПОИСКА: `{keyword}`\n📚 Найдено: {len(results)}\n\n"
-                    for group in results[:10]:
-                        message += f"📌 {group['name']} | 🏫 {group.get('facul', '?')}\n"
-                    if len(results) > 10:
-                        message += f"\n... и ещё {len(results) - 10} групп"
-                    message += f"\n\n💡 Напишите полное название группы для выбора"
+        if state.get("mode") == "waiting_for_group":
+            group_name = text.strip()
+            group_id, found_name = find_group_by_name(group_name)
+            if group_id:
+                set_user_group(user_id, group_id, found_name)
+                clear_user_selection(user_id)
+                del user_states[user_id_str]
+                send_keyboard(vk, peer_id, f"✅ Группа `{found_name}` сохранена!", get_main_keyboard(user_has_group=True))
+            else:
+                send_keyboard(vk, peer_id, f"❌ Группа `{group_name}` не найдена.\nПопробуйте `📚 ВСЕ ГРУППЫ`", get_search_keyboard())
+            return
+        
+        elif state.get("mode") == "waiting_for_teacher":
+            teacher_query = text.strip()
+            if teacher_query:
+                results = search_teachers_by_name(teacher_query)
+                if len(results) == 1:
+                    teacher = results[0]
+                    set_user_selection(user_id, "teacher", teacher["name"], teacher["id"])
+                    del user_states[user_id_str]
+                    answer = get_schedule_for_teacher_today(teacher["id"], teacher["name"])
+                    send_keyboard(vk, peer_id, answer, get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
+                elif len(results) > 1:
+                    message = f"🔍 Найдено преподавателей по запросу `{teacher_query}`:\n\n"
+                    for t in results[:10]:
+                        message += f"📌 {t['name']}\n"
+                    message += f"\n💡 Уточните запрос (например, `преподаватель {results[0]['name']}`)"
                     send_keyboard(vk, peer_id, message, get_search_keyboard())
                 else:
-                    send_keyboard(vk, peer_id, f"❌ По запросу `{keyword}` ничего не найдено", get_search_keyboard())
-                del user_states[user_id_str]
+                    send_keyboard(vk, peer_id, f"❌ Преподаватель `{teacher_query}` не найден", get_search_keyboard())
             else:
-                send_keyboard(vk, peer_id, "❓ Введите текст для поиска", get_search_keyboard())
+                send_keyboard(vk, peer_id, "❓ Введите фамилию преподавателя", get_search_keyboard())
             return
-        elif state.get("mode") == "waiting_for_group":
-            group_name = text.strip()
-            group_id, found_name, suggestions = find_group_by_name(group_name)
-            if group_id:
-                user_states[user_id_str] = {"mode": "confirm_group", "group_id": group_id, "group_name": found_name}
-                send_keyboard(vk, peer_id, f"📌 Выбрана группа: `{found_name}`\n\n✅ Подтвердите выбор:", get_after_select_keyboard(found_name))
-            else:
-                if suggestions:
-                    msg = f"❌ Группа `{group_name}` не найдена.\n\n🤔 Возможно, вы имели в виду:\n" + "\n".join([f"• {s}" for s in suggestions[:5]])
-                    send_keyboard(vk, peer_id, msg, get_search_keyboard())
+        
+        elif state.get("mode") == "waiting_for_auditorium":
+            auditorium_query = text.strip()
+            if auditorium_query:
+                results = search_auditoriums_by_name(auditorium_query)
+                if len(results) == 1:
+                    aud = results[0]
+                    set_user_selection(user_id, "auditorium", aud["name"], aud["id"])
+                    del user_states[user_id_str]
+                    answer = get_schedule_for_auditorium_today(aud["id"], aud["name"])
+                    send_keyboard(vk, peer_id, answer, get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
+                elif len(results) > 1:
+                    message = f"🔍 Найдено аудиторий по запросу `{auditorium_query}`:\n\n"
+                    for a in results[:10]:
+                        message += f"📌 {a['name']}\n"
+                    message += f"\n💡 Уточните запрос (например, `аудитория {results[0]['name']}`)"
+                    send_keyboard(vk, peer_id, message, get_search_keyboard())
                 else:
-                    send_keyboard(vk, peer_id, f"❌ Группа `{group_name}` не найдена.\nПопробуйте `📚 ВСЕ ГРУППЫ`", get_search_keyboard())
-            return
-        elif state.get("mode") == "confirm_group":
-            if "да, эта" in text_lower or "подтверждаю" in text_lower:
-                set_user_group(user_id, state["group_id"], state["group_name"])
-                del user_states[user_id_str]
-                send_keyboard(vk, peer_id, f"✅ Группа `{state['group_name']}` сохранена!", get_main_keyboard(user_has_group=True))
+                    send_keyboard(vk, peer_id, f"❌ Аудитория `{auditorium_query}` не найдена", get_search_keyboard())
             else:
-                del user_states[user_id_str]
-                send_keyboard(vk, peer_id, "❌ Выбор отменён", get_main_keyboard(user_has_group=False))
+                send_keyboard(vk, peer_id, "❓ Введите номер аудитории", get_search_keyboard())
             return
     
     # Обработка кнопок
-    if text == "📚 ВЫБРАТЬ ГРУППУ" or text == "🔍 ВЫБРАТЬ ДРУГУЮ":
+    if text == "📚 ВЫБРАТЬ ГРУППУ":
         user_states[user_id_str] = {"mode": "waiting_for_group"}
         send_keyboard(vk, peer_id, "📝 Напишите название группы (например: `иктс тб31`)", get_search_keyboard())
         return
+    
     if text == "🔍 ПОИСК ГРУППЫ":
-        user_states[user_id_str] = {"mode": "search_groups"}
         send_keyboard(vk, peer_id, "🔍 Введите ключевое слово для поиска группы", get_search_keyboard())
         return
+    
     if text == "📚 ВСЕ ГРУППЫ" or text == "📋 ВСЕ ГРУППЫ":
         message = get_groups_list_message(1)
         send_keyboard(vk, peer_id, message, get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
         return
+    
+    if text == "👨‍🏫 ПРЕПОДАВАТЕЛИ":
+        message = get_teachers_list_message(1)
+        user_states[user_id_str] = {"mode": "waiting_for_teacher"}
+        send_keyboard(vk, peer_id, message, get_search_keyboard())
+        return
+    
+    if text == "🏢 АУДИТОРИИ":
+        message = get_auditoriums_list_message(1)
+        user_states[user_id_str] = {"mode": "waiting_for_auditorium"}
+        send_keyboard(vk, peer_id, message, get_search_keyboard())
+        return
+    
     if text == "📅 РАСПИСАНИЕ":
-        user_group = get_user_group(user_id)
-        if user_group:
-            answer = get_schedule_for_today(user_group['group_id'])
-            send_keyboard(vk, peer_id, answer, get_main_keyboard(user_has_group=True))
+        if current_selection["type"] == "teacher":
+            answer = get_schedule_for_teacher_today(current_selection["id"], current_selection["name"])
+            send_keyboard(vk, peer_id, answer, get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
+        elif current_selection["type"] == "auditorium":
+            answer = get_schedule_for_auditorium_today(current_selection["id"], current_selection["name"])
+            send_keyboard(vk, peer_id, answer, get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
         else:
-            send_keyboard(vk, peer_id, "❓ Сначала выберите группу!", get_main_keyboard(user_has_group=False))
+            user_group = get_user_group(user_id)
+            if user_group:
+                answer = get_schedule_for_group_today(user_group["group_id"])
+                send_keyboard(vk, peer_id, answer, get_main_keyboard(user_has_group=True))
+            else:
+                send_keyboard(vk, peer_id, "❓ Сначала выберите группу!", get_main_keyboard(user_has_group=False))
         return
+    
     if text == "📆 НЕДЕЛЯ":
-        user_group = get_user_group(user_id)
-        if user_group:
-            answer = get_schedule_for_current_week(user_group['group_id'])
-            send_keyboard(vk, peer_id, answer, get_main_keyboard(user_has_group=True))
+        if current_selection["type"] == "teacher":
+            answer = get_schedule_for_teacher_week(current_selection["id"], current_selection["name"], datetime.now().strftime("%Y-%m-%d"))
+            send_keyboard(vk, peer_id, answer, get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
+        elif current_selection["type"] == "auditorium":
+            answer = get_schedule_for_auditorium_week(current_selection["id"], current_selection["name"], datetime.now().strftime("%Y-%m-%d"))
+            send_keyboard(vk, peer_id, answer, get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
         else:
-            send_keyboard(vk, peer_id, "❓ Сначала выберите группу!", get_main_keyboard(user_has_group=False))
+            user_group = get_user_group(user_id)
+            if user_group:
+                answer = get_schedule_for_group_week(user_group["group_id"], datetime.now().strftime("%Y-%m-%d"))
+                send_keyboard(vk, peer_id, answer, get_main_keyboard(user_has_group=True))
+            else:
+                send_keyboard(vk, peer_id, "❓ Сначала выберите группу!", get_main_keyboard(user_has_group=False))
         return
+    
     if text == "⏩ СЛЕДУЮЩАЯ НЕДЕЛЯ":
-        user_group = get_user_group(user_id)
-        if user_group:
-            answer = get_schedule_for_next_week(user_group['group_id'])
-            send_keyboard(vk, peer_id, answer, get_main_keyboard(user_has_group=True))
+        next_week_date = (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d")
+        if current_selection["type"] == "teacher":
+            answer = get_schedule_for_teacher_week(current_selection["id"], current_selection["name"], next_week_date)
+            send_keyboard(vk, peer_id, answer, get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
+        elif current_selection["type"] == "auditorium":
+            answer = get_schedule_for_auditorium_week(current_selection["id"], current_selection["name"], next_week_date)
+            send_keyboard(vk, peer_id, answer, get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
         else:
-            send_keyboard(vk, peer_id, "❓ Сначала выберите группу!", get_main_keyboard(user_has_group=False))
+            user_group = get_user_group(user_id)
+            if user_group:
+                answer = get_schedule_for_group_week(user_group["group_id"], next_week_date)
+                send_keyboard(vk, peer_id, answer, get_main_keyboard(user_has_group=True))
+            else:
+                send_keyboard(vk, peer_id, "❓ Сначала выберите группу!", get_main_keyboard(user_has_group=False))
         return
+    
     if text == "🎯 БЛИЖАЙШЕЕ":
-        user_group = get_user_group(user_id)
-        if user_group:
-            answer = get_next_lesson(user_group['group_id'])
-            send_keyboard(vk, peer_id, answer, get_main_keyboard(user_has_group=True))
+        if current_selection["type"] in ["teacher", "auditorium"]:
+            send_keyboard(vk, peer_id, "🎯 Ближайшее занятие доступно только для групп", get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
         else:
-            send_keyboard(vk, peer_id, "❓ Сначала выберите группу!", get_main_keyboard(user_has_group=False))
+            user_group = get_user_group(user_id)
+            if user_group:
+                # Найдём ближайшую дату с занятиями
+                today = datetime.now().strftime("%Y-%m-%d")
+                lessons, _ = fetch_schedule_by_group(user_group["group_id"], today)
+                if lessons:
+                    answer = get_schedule_for_group_today(user_group["group_id"])
+                else:
+                    # Ищем следующий день
+                    found = False
+                    for i in range(1, 8):
+                        next_date = (datetime.now() + timedelta(days=i)).strftime("%Y-%m-%d")
+                        lessons, _ = fetch_schedule_by_group(user_group["group_id"], next_date)
+                        if lessons:
+                            group_name = get_group_name_by_id(user_group["group_id"])
+                            answer = format_lessons(lessons, f"📅 РАСПИСАНИЕ ГРУППЫ {group_name}", next_date)
+                            answer += f"\n\n📆 Следующее занятие: {datetime.strptime(next_date, '%Y-%m-%d').strftime('%d.%m.%Y')}"
+                            found = True
+                            break
+                    if not found:
+                        answer = "📭 Ближайших занятий не найдено"
+                send_keyboard(vk, peer_id, answer, get_main_keyboard(user_has_group=True))
+            else:
+                send_keyboard(vk, peer_id, "❓ Сначала выберите группу!", get_main_keyboard(user_has_group=False))
         return
+    
     if text == "🏫 МОЯ ГРУППА":
         user_group = get_user_group(user_id)
         if user_group:
@@ -910,33 +1005,49 @@ def handle_message(text, user_id, peer_id, from_chat, vk):
         else:
             send_keyboard(vk, peer_id, "❓ Группа не выбрана. Нажмите `📚 ВЫБРАТЬ ГРУППУ`", get_main_keyboard(user_has_group=False))
         return
+    
     if text == "🖥️ СТАТУС САЙТА":
         answer = get_status_message()
         send_keyboard(vk, peer_id, answer, get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
         return
+    
     if text == "❓ ПОМОЩЬ":
         user_group = get_user_group(user_id)
+        selection = get_user_selection(user_id)
+        selection_text = ""
+        if selection["type"] == "teacher":
+            selection_text = f"\n🎯 Текущий выбор: преподаватель `{selection['name']}`"
+        elif selection["type"] == "auditorium":
+            selection_text = f"\n🎯 Текущий выбор: аудитория `{selection['name']}`"
         help_text = (
-            "🤖 *Тони Диспетчер - Бот с расписанием*\n\n"
-            f"📌 Группа: `{user_group['group_name']}`\n\n" if user_group else "❓ Группа не выбрана\n\n"
+            "🤖 *Тони Диспетчер - Бот с расписанием СГУ*\n\n"
+            f"📌 Группа: `{user_group['group_name']}`" if user_group else "❓ Группа не выбрана"
+            f"{selection_text}\n\n"
             "✨ *Что умеет бот:*\n\n"
-            "**Основные команды:**\n"
+            "**По группам:**\n"
             "• 📅 РАСПИСАНИЕ - сегодня\n"
             "• 📆 НЕДЕЛЯ - текущая неделя\n"
             "• ⏩ СЛЕДУЮЩАЯ НЕДЕЛЯ\n"
-            "• 🎯 БЛИЖАЙШЕЕ - следующая пара\n"
-            "• 🖥️ СТАТУС САЙТА - проверить сайт СГУ\n\n"
-            "**Управление группой:**\n"
-            "• 📚 ВЫБРАТЬ ГРУППУ - ввести название\n"
-            "• 🔍 ПОИСК ГРУППЫ - по ключевому слову\n"
-            "• 📋 ВСЕ ГРУППЫ - список\n"
-            "• 🏫 МОЯ ГРУППА - посмотреть\n\n"
-            f"🕐 Автоматическая проверка обновлений: каждые 6 часов\n"
-            f"🕐 Последняя проверка: {get_last_check_time()}\n\n"
-            "💡 *Совет:* Можно писать текстом: `завтра иктс тб31`"
+            "• 🎯 БЛИЖАЙШЕЕ - следующее занятие\n\n"
+            "**По преподавателям:**\n"
+            "• 👨‍🏫 ПРЕПОДАВАТЕЛИ - список\n"
+            "• Напишите фамилию для выбора\n\n"
+            "**По аудиториям:**\n"
+            "• 🏢 АУДИТОРИИ - список\n"
+            "• Напишите номер для выбора\n\n"
+            "**Управление:**\n"
+            "• 📚 ВЫБРАТЬ ГРУППУ - задать группу\n"
+            "• 🗑️ СБРОСИТЬ ВЫБОР - вернуться к группе\n"
+            "• ◀️ НАЗАД - из любого меню\n\n"
+            "**Текстовые команды:**\n"
+            "• `расписание иктс тб31` - расписание группы\n"
+            "• `преподаватель Иванов` - выбрать преподавателя\n"
+            "• `аудитория 2349` - выбрать аудиторию\n\n"
+            "💡 *Совет:* Используйте кнопки для быстрого доступа!"
         )
         send_keyboard(vk, peer_id, help_text, get_main_keyboard(user_has_group=bool(user_group)))
         return
+    
     if text == "❌ ОТМЕНА":
         if user_id_str in user_states:
             del user_states[user_id_str]
@@ -945,10 +1056,67 @@ def handle_message(text, user_id, peer_id, from_chat, vk):
         return
     
     # Текстовые команды
+    if text_lower.startswith("преподаватель "):
+        teacher_name = text_lower.replace("преподаватель ", "").strip()
+        if teacher_name:
+            results = search_teachers_by_name(teacher_name)
+            if len(results) == 1:
+                teacher = results[0]
+                set_user_selection(user_id, "teacher", teacher["name"], teacher["id"])
+                answer = get_schedule_for_teacher_today(teacher["id"], teacher["name"])
+                send_keyboard(vk, peer_id, answer, get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
+            elif len(results) > 1:
+                message = f"🔍 Найдено преподавателей по запросу `{teacher_name}`:\n\n"
+                for t in results[:10]:
+                    message += f"📌 {t['name']}\n"
+                message += f"\n💡 Уточните запрос (например, `преподаватель {results[0]['name']}`)"
+                send_keyboard(vk, peer_id, message, get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
+            else:
+                send_keyboard(vk, peer_id, f"❌ Преподаватель `{teacher_name}` не найден", get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
+        else:
+            send_keyboard(vk, peer_id, "❓ Напишите фамилию преподавателя", get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
+        return
+    
+    if text_lower.startswith("аудитория "):
+        aud_name = text_lower.replace("аудитория ", "").strip()
+        if aud_name:
+            results = search_auditoriums_by_name(aud_name)
+            if len(results) == 1:
+                aud = results[0]
+                set_user_selection(user_id, "auditorium", aud["name"], aud["id"])
+                answer = get_schedule_for_auditorium_today(aud["id"], aud["name"])
+                send_keyboard(vk, peer_id, answer, get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
+            elif len(results) > 1:
+                message = f"🔍 Найдено аудиторий по запросу `{aud_name}`:\n\n"
+                for a in results[:10]:
+                    message += f"📌 {a['name']}\n"
+                message += f"\n💡 Уточните запрос (например, `аудитория {results[0]['name']}`)"
+                send_keyboard(vk, peer_id, message, get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
+            else:
+                send_keyboard(vk, peer_id, f"❌ Аудитория `{aud_name}` не найдена", get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
+        else:
+            send_keyboard(vk, peer_id, "❓ Напишите номер аудитории", get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
+        return
+    
+    if text_lower.startswith("выбрать "):
+        group_name = text_lower.replace("выбрать ", "").strip()
+        if group_name:
+            group_id, found_name = find_group_by_name(group_name)
+            if group_id:
+                set_user_group(user_id, group_id, found_name)
+                clear_user_selection(user_id)
+                send_keyboard(vk, peer_id, f"✅ Группа `{found_name}` сохранена!", get_main_keyboard(user_has_group=True))
+            else:
+                send_keyboard(vk, peer_id, f"❌ Группа `{group_name}` не найдена", get_main_keyboard(user_has_group=False))
+        else:
+            send_keyboard(vk, peer_id, "❓ Напишите название группы", get_main_keyboard(user_has_group=False))
+        return
+    
     if text_lower == "группы" or text_lower == "список групп":
         answer = get_groups_list_message(1)
         send_keyboard(vk, peer_id, answer, get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
         return
+    
     if text_lower.startswith("найди ") or text_lower.startswith("поиск "):
         keyword = text_lower.replace("найди ", "").replace("поиск ", "").strip()
         if keyword:
@@ -957,21 +1125,7 @@ def handle_message(text, user_id, peer_id, from_chat, vk):
         else:
             send_keyboard(vk, peer_id, "❓ Напишите, что искать", get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
         return
-    if text_lower.startswith("выбрать "):
-        group_name = text_lower.replace("выбрать ", "").strip()
-        if group_name:
-            group_id, found_name, suggestions = find_group_by_name(group_name)
-            if group_id:
-                set_user_group(user_id, group_id, found_name)
-                send_keyboard(vk, peer_id, f"✅ Группа `{found_name}` сохранена!", get_main_keyboard(user_has_group=True))
-            else:
-                if suggestions:
-                    send_keyboard(vk, peer_id, f"❌ Группа `{group_name}` не найдена.\n\n🤔 Возможно: {', '.join(suggestions[:3])}", get_main_keyboard(user_has_group=False))
-                else:
-                    send_keyboard(vk, peer_id, f"❌ Группа `{group_name}` не найдена", get_main_keyboard(user_has_group=False))
-        else:
-            send_keyboard(vk, peer_id, "❓ Напишите название группы", get_main_keyboard(user_has_group=False))
-        return
+    
     if text_lower == "моя группа" or text_lower == "моя группа?":
         user_group = get_user_group(user_id)
         if user_group:
@@ -979,101 +1133,56 @@ def handle_message(text, user_id, peer_id, from_chat, vk):
         else:
             send_keyboard(vk, peer_id, "❓ Группа не выбрана", get_main_keyboard(user_has_group=False))
         return
-    if text_lower == "статус" or text_lower == "статус сайта" or text_lower == "проверка":
+    
+    if text_lower == "статус" or text_lower == "статус сайта":
         answer = get_status_message()
         send_keyboard(vk, peer_id, answer, get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
         return
+    
     if text_lower in ["/start", "/help", "начать", "помощь", "start", "help"]:
         user_group = get_user_group(user_id)
         help_text = (
-            f"🤖 *Тони Диспетчер - Бот с расписанием*\n\n"
-            f"📌 Группа: `{user_group['group_name']}`\n\n" if user_group else "❓ Группа не выбрана\n\n"
+            f"🤖 *Тони Диспетчер - Бот с расписанием СГУ*\n\n"
+            f"📌 Группа: `{user_group['group_name']}`" if user_group else "❓ Группа не выбрана\n\n"
             "✨ *Как пользоваться:*\n\n"
             "**Выбор группы:**\n• `выбрать иктс тб31` - сохранить группу\n• `группы` - список всех групп\n• `найди иктс` - поиск группы\n\n"
-            "**Команды (после выбора группы):**\n• `расписание` - на сегодня\n• `завтра` - на завтра\n• `неделя` - на текущую неделю\n"
-            "• `следующая неделя` - на следующую неделю\n• `следующее` - ближайшее занятие\n\n"
-            f"🕐 Автоматическая проверка обновлений: каждые 6 часов\n"
-            f"🕐 Последняя проверка: {get_last_check_time()}\n\n"
+            "**Преподаватели:**\n• `преподаватель Иванов` - выбрать преподавателя\n\n"
+            "**Аудитории:**\n• `аудитория 2349` - выбрать аудиторию\n\n"
+            "**Команды после выбора:**\n• `расписание` - на сегодня\n• `неделя` - на текущую неделю\n"
+            "• `следующая неделя` - на следующую неделю\n\n"
             "💡 *Совет:* Используйте кнопки для быстрого доступа!"
         )
         send_keyboard(vk, peer_id, help_text, get_main_keyboard(user_has_group=bool(user_group)))
         return
     
-    # Команды с указанием группы
-    action = "today"
-    next_week_patterns = ["следующая неделя", "следущая неделя", "след неделя", "next week"]
-    if any(p in text_lower for p in next_week_patterns):
-        action = "next_week"
-    elif any(w in text_lower for w in ["завтра", "tomorrow"]):
-        action = "tomorrow"
-    elif any(w in text_lower for w in ["следующее", "ближайщее", "след", "next"]):
-        action = "next"
-    elif any(w in text_lower for w in ["неделя", "week"]):
-        action = "week"
-    elif any(w in text_lower for w in ["пн", "понедельник"]):
-        action = "monday"
-    elif any(w in text_lower for w in ["вт", "вторник"]):
-        action = "tuesday"
-    elif any(w in text_lower for w in ["ср", "среда"]):
-        action = "wednesday"
-    elif any(w in text_lower for w in ["чт", "четверг"]):
-        action = "thursday"
-    elif any(w in text_lower for w in ["пт", "пятница"]):
-        action = "friday"
-    
-    query_for_group = text_lower
-    action_words = ["завтра", "tomorrow", "следующее", "ближайщее", "след", "неделя", "week", "пн", "понедельник", "вт", "вторник", "ср", "среда", "чт", "четверг", "пт", "пятница", "следующая неделя", "следущая неделя", "след неделя", "next week"]
-    for word in action_words:
-        query_for_group = query_for_group.replace(word, "").strip()
-    
-    if query_for_group:
-        group_id, group_name, suggestions = find_group_by_name(query_for_group)
-        if not group_id:
-            if suggestions:
-                send_keyboard(vk, peer_id, f"❌ Группа не найдена.\n\n🤔 Возможно: {', '.join(suggestions[:3])}", get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
-            else:
-                send_keyboard(vk, peer_id, f"❌ Группа `{query_for_group}` не найдена", get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
-            return
+    # Если просто написали название группы
+    group_id, group_name = find_group_by_name(text_lower)
+    if group_id:
         set_user_group(user_id, group_id, group_name)
-    else:
-        user_group = get_user_group(user_id)
-        if not user_group:
-            send_keyboard(vk, peer_id, "❓ У вас не выбрана группа.\n\nНажмите `📚 ВЫБРАТЬ ГРУППУ`", get_main_keyboard(user_has_group=False))
-            return
-        group_id = user_group['group_id']
+        clear_user_selection(user_id)
+        answer = get_schedule_for_group_today(group_id)
+        send_keyboard(vk, peer_id, answer, get_main_keyboard(user_has_group=True))
+        return
     
-    if action == "tomorrow":
-        answer = get_schedule_for_tomorrow(group_id)
-    elif action == "next":
-        answer = get_next_lesson(group_id)
-    elif action == "next_week":
-        answer = get_schedule_for_next_week(group_id)
-    elif action == "week":
-        answer = get_schedule_for_current_week(group_id)
-    elif action == "monday":
-        answer = get_schedule(group_id, get_next_weekday(0))
-    elif action == "tuesday":
-        answer = get_schedule(group_id, get_next_weekday(1))
-    elif action == "wednesday":
-        answer = get_schedule(group_id, get_next_weekday(2))
-    elif action == "thursday":
-        answer = get_schedule(group_id, get_next_weekday(3))
-    elif action == "friday":
-        answer = get_schedule(group_id, get_next_weekday(4))
+    # Если ничего не подошло
+    user_group = get_user_group(user_id)
+    if user_group:
+        send_keyboard(vk, peer_id, "❓ Неизвестная команда. Напишите `помощь` для списка команд", get_main_keyboard(user_has_group=True))
     else:
-        answer = get_schedule_for_today(group_id)
-    
-    send_keyboard(vk, peer_id, answer, get_main_keyboard(user_has_group=True))
+        send_keyboard(vk, peer_id, "❓ Неизвестная команда. Напишите `помощь` для списка команд", get_main_keyboard(user_has_group=False))
 
 # ========== ЗАПУСК ==========
 def main():
-    print("🚀 Запуск Тони Диспетчер - Бот с расписанием")
+    print("🚀 Запуск Тони Диспетчер - Бот с расписанием СГУ")
     print("=" * 40)
     
     start_self_ping()
     get_available_years()
     get_current_academic_year()
+    # Предзагружаем списки
     get_all_groups()
+    get_all_teachers()
+    get_all_auditoriums()
     
     vk_session = vk_api.VkApi(token=VK_TOKEN)
     vk = vk_session.get_api()
@@ -1083,7 +1192,7 @@ def main():
     start_schedule_checker(vk)
     
     print("🤖 Бот готов к работе!")
-    print("📡 Функции: веб-сервер, self-ping, все кнопки")
+    print("📡 Функции: группы, преподаватели, аудитории")
     print("🕐 Автоматическая проверка обновлений: каждые 6 часов")
     print("=" * 40)
     
