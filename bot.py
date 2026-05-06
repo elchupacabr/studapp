@@ -363,12 +363,14 @@ def parse_lesson_type(discipline):
         return "", discipline
 
 def format_lessons(lessons, title, date):
+    """Расписание на один день (компактно)"""
     if not lessons:
-        return f"{title}\n📅 {datetime.strptime(date, '%Y-%m-%d').strftime('%d.%m.%Y')}\n\n❌ Занятий не найдено"
+        date_obj = datetime.strptime(date, "%Y-%m-%d")
+        return f"{title}\n📅 {date_obj.strftime('%d.%m.%Y')}\n\n❌ Занятий нет"
     
     date_obj = datetime.strptime(date, "%Y-%m-%d")
     result = f"{title}\n📅 {date_obj.strftime('%d.%m.%Y')} ({get_weekday_rus(date_obj.weekday())})\n"
-    result += "=" * 35 + "\n\n"
+    result += "─" * 30 + "\n"  # короткая линия вместо =====
     
     for lesson in sorted(lessons, key=lambda x: x.get("начало", "00:00")):
         time_start = lesson.get("начало", "")
@@ -376,31 +378,29 @@ def format_lessons(lessons, title, date):
         discipline = lesson.get("дисциплина", "")
         teacher = lesson.get("преподаватель", "")
         room = lesson.get("аудитория", "")
-        group = lesson.get("группа", "")
+        
         lesson_type, clean_discipline = parse_lesson_type(discipline)
         
         result += f"⏰ {time_start}–{time_end}\n"
         if lesson_type:
             result += f"{lesson_type}\n"
         result += f"📚 {clean_discipline}\n"
-        result += f"👨‍🏫 {teacher}\n"
-        result += f"📍 ауд. {room}\n"
-        if group:
-            result += f"👥 Группа: {group}\n"
-        result += "-" * 35 + "\n"
+        result += f"👨‍🏫 {teacher}  |  🏫 {room}\n"
+        result += "•" * 25 + "\n"  # точки вместо тире
     
     return result
 
 def format_week_schedule(lessons_by_date, title, start_date, end_date):
+    """Расписание на неделю (компактно)"""
     if not lessons_by_date:
         start_obj = datetime.strptime(start_date, "%Y-%m-%d")
         end_obj = datetime.strptime(end_date, "%Y-%m-%d")
-        return f"{title}\n📆 {start_obj.strftime('%d.%m')} – {end_obj.strftime('%d.%m.%Y')}\n\n❌ Занятий не найдено"
+        return f"{title}\n📆 {start_obj.strftime('%d.%m')} – {end_obj.strftime('%d.%m.%Y')}\n\n❌ Занятий нет"
     
     start_obj = datetime.strptime(start_date, "%Y-%m-%d")
     end_obj = datetime.strptime(end_date, "%Y-%m-%d")
     result = f"{title}\n📆 {start_obj.strftime('%d.%m')} – {end_obj.strftime('%d.%m.%Y')}\n"
-    result += "=" * 40 + "\n\n"
+    result += "─" * 35 + "\n"  # короткая линия вместо =====
     
     for date, lessons in sorted(lessons_by_date.items()):
         if not lessons:
@@ -408,8 +408,8 @@ def format_week_schedule(lessons_by_date, title, start_date, end_date):
         date_obj = datetime.strptime(date, "%Y-%m-%d")
         weekday = get_weekday_rus(date_obj.weekday())
         date_short = date_obj.strftime("%d.%m")
-        result += f"📌 {weekday.upper()} ({date_short})\n"
-        result += "─" * 35 + "\n"
+        result += f"\n📌 {weekday.upper()} ({date_short})\n"
+        result += "·" * 25 + "\n"  # точки вместо длинной линии
         
         for lesson in sorted(lessons, key=lambda x: x.get("начало", "00:00")):
             time_start = lesson.get("начало", "")
@@ -417,20 +417,28 @@ def format_week_schedule(lessons_by_date, title, start_date, end_date):
             discipline = lesson.get("дисциплина", "")
             teacher = lesson.get("преподаватель", "")
             room = lesson.get("аудитория", "")
-            group = lesson.get("группа", "")
-            lesson_type, clean_discipline = parse_lesson_type(discipline)
+            
+            clean_discipline = discipline
+            lesson_type_short = ""
+            if discipline.startswith("лек "):
+                clean_discipline = discipline[4:]
+                lesson_type_short = "ЛЕК"
+            elif discipline.startswith("пр "):
+                clean_discipline = discipline[3:]
+                lesson_type_short = "ПРАК"
+            elif discipline.startswith("лаб "):
+                clean_discipline = discipline[4:]
+                lesson_type_short = "ЛАБ"
+            
             result += f"⏰ {time_start}–{time_end}"
-            if lesson_type:
-                result += f"  {lesson_type.split()[1] if len(lesson_type.split()) > 1 else lesson_type}"
+            if lesson_type_short:
+                result += f"  [{lesson_type_short}]"
             result += f"\n   📚 {clean_discipline}\n"
             result += f"   👨‍🏫 {teacher}  |  🏫 {room}\n"
-            if group:
-                result += f"   👥 {group}\n"
-            result += "\n"
-        result += "\n"
+        result += ""
     
     return result
-
+    
 # ========== ОСНОВНЫЕ ФУНКЦИИ РАСПИСАНИЯ ==========
 def get_schedule_for_group_day(group_id, target_date):
     lessons, error = fetch_schedule_by_group(group_id, target_date)
