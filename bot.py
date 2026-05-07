@@ -966,6 +966,29 @@ def handle_message(text, user_id, peer_id, from_chat, vk):
                 send_keyboard(vk, peer_id, "❓ Введите номер аудитории", get_search_keyboard())
             return
     
+    # ===== ПРОВЕРКА НА ПРОСТОЙ НОМЕР АУДИТОРИИ (САМОЕ ВАЖНОЕ - ДО ВСЕХ ОСТАЛЬНЫХ КОМАНД!) =====
+    # Это сработает, если пользователь ввёл просто "1301" без слова "аудитория"
+    aud_pattern = re.match(r'^(\d{2,5}[а-я]?)$', text_lower)
+    if aud_pattern:
+        aud_number = aud_pattern.group(1)
+        results = search_auditoriums_by_name(aud_number)
+        if len(results) == 1:
+            aud = results[0]
+            set_user_selection(user_id, "auditorium", aud["name"], aud["id"])
+            answer = get_schedule_for_auditorium_today(aud["id"], aud["name"])
+            send_keyboard(vk, peer_id, answer, get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
+            return
+        elif len(results) > 1:
+            message = f"🔍 Найдено аудиторий по запросу `{aud_number}`:\n\n"
+            for a in results[:10]:
+                message += f"📌 {a['name']}\n"
+            message += f"\n💡 Уточните запрос (например, `аудитория {results[0]['name']}`)"
+            send_keyboard(vk, peer_id, message, get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
+            return
+        else:
+            send_keyboard(vk, peer_id, f"❌ Аудитория `{aud_number}` не найдена", get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
+            return
+    
     # Обработка кнопок
     if text == "📚 ВЫБРАТЬ ГРУППУ":
         user_states[user_id_str] = {"mode": "waiting_for_group"}
@@ -1090,7 +1113,6 @@ def handle_message(text, user_id, peer_id, from_chat, vk):
         elif selection["type"] == "auditorium":
             selection_text = f"\n🎯 Текущий выбор: аудитория `{selection['name']}`"
         
-        # Формируем текст помощи в зависимости от того, есть ли группа
         if user_group:
             group_text = f"📌 Ваша группа: `{user_group['group_name']}`"
         else:
@@ -1111,7 +1133,7 @@ def handle_message(text, user_id, peer_id, from_chat, vk):
             "• Напишите фамилию для выбора\n\n"
             "**По аудиториям:**\n"
             "• 🏢 АУДИТОРИИ - список\n"
-            "• Напишите номер для выбора\n\n"
+            "• Напишите номер для выбора (можно просто цифрами)\n\n"
             "**Поиск по дате:**\n"
             "• `расписание на 21.05` - на конкретный день\n"
             "• `неделя на 21.05` - на неделю (с 18 по 24 мая)\n\n"
@@ -1123,13 +1145,14 @@ def handle_message(text, user_id, peer_id, from_chat, vk):
             "**Текстовые команды:**\n"
             "• `расписание иктс тб31` - расписание группы\n"
             "• `преподаватель Иванов` - выбрать преподавателя\n"
-            "• `аудитория 2349` - выбрать аудиторию\n\n"
+            "• `аудитория 2349` - выбрать аудиторию\n"
+            "• `1301` - быстрый поиск аудитории\n\n"
             "💡 *Совет:* Используйте кнопки для быстрого доступа!"
         )
         send_keyboard(vk, peer_id, help_text, get_main_keyboard(user_has_group=bool(user_group)))
         return
     
-    # Текстовые команды
+    # Текстовые команды (преподаватель, аудитория, выбрать, группы, найди, моя группа, статус, помощь)
     if text_lower.startswith("преподаватель "):
         teacher_name = text_lower.replace("преподаватель ", "").strip()
         if teacher_name:
@@ -1171,29 +1194,6 @@ def handle_message(text, user_id, peer_id, from_chat, vk):
         else:
             send_keyboard(vk, peer_id, "❓ Напишите номер аудитории", get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
         return
-    
-    # ===== ПРОВЕРКА НА ПРОСТОЙ НОМЕР АУДИТОРИИ (цифры или цифры с буквой) =====
-    # Это сработает, если пользователь ввёл просто "1301" без слова "аудитория"
-    aud_pattern = re.match(r'^(\d{2,5}[а-я]?)$', text_lower)
-    if aud_pattern:
-        aud_number = aud_pattern.group(1)
-        results = search_auditoriums_by_name(aud_number)
-        if len(results) == 1:
-            aud = results[0]
-            set_user_selection(user_id, "auditorium", aud["name"], aud["id"])
-            answer = get_schedule_for_auditorium_today(aud["id"], aud["name"])
-            send_keyboard(vk, peer_id, answer, get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
-            return
-        elif len(results) > 1:
-            message = f"🔍 Найдено аудиторий по запросу `{aud_number}`:\n\n"
-            for a in results[:10]:
-                message += f"📌 {a['name']}\n"
-            message += f"\n💡 Уточните запрос (например, `аудитория {results[0]['name']}`)"
-            send_keyboard(vk, peer_id, message, get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
-            return
-        else:
-            send_keyboard(vk, peer_id, f"❌ Аудитория `{aud_number}` не найдена", get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
-            return
     
     if text_lower.startswith("выбрать "):
         group_name = text_lower.replace("выбрать ", "").strip()
@@ -1257,7 +1257,7 @@ def handle_message(text, user_id, peer_id, from_chat, vk):
             "✨ *Как пользоваться:*\n\n"
             "**Выбор группы:**\n• `выбрать иктс тб31` - сохранить группу\n• `группы` - список всех групп\n• `найди иктс` - поиск группы\n\n"
             "**Преподаватели:**\n• `преподаватель Иванов` - выбрать преподавателя\n\n"
-            "**Аудитории:**\n• `аудитория 2349` - выбрать аудиторию\n• просто `1301` - быстрый поиск аудитории\n\n"
+            "**Аудитории:**\n• `аудитория 2349` - выбрать аудиторию\n• `1301` - быстрый поиск (просто цифры)\n\n"
             "**Поиск по дате:**\n• `расписание на 21.05` - на конкретный день\n"
             "• `неделя на 21.05` - на неделю (с 18 по 24 мая)\n\n"
             "**Команды после выбора:**\n• `расписание` - на сегодня\n• `неделя` - на текущую неделю\n"
