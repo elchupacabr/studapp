@@ -940,7 +940,14 @@ def handle_message(text, user_id, peer_id, from_chat, vk):
         elif state.get("mode") == "waiting_for_auditorium":
             auditorium_query = text.strip()
             if auditorium_query:
-                results = search_auditoriums_by_name(auditorium_query)
+                # Проверяем, является ли введённое значение просто номером (цифры или цифры+буква)
+                aud_number_match = re.match(r'^(\d{2,5}[а-я]?)$', auditorium_query.lower())
+                if aud_number_match:
+                    aud_number = aud_number_match.group(1)
+                    results = search_auditoriums_by_name(aud_number)
+                else:
+                    results = search_auditoriums_by_name(auditorium_query)
+                
                 if len(results) == 1:
                     aud = results[0]
                     set_user_selection(user_id, "auditorium", aud["name"], aud["id"])
