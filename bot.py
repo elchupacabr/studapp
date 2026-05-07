@@ -907,6 +907,12 @@ def handle_message(text, user_id, peer_id, from_chat, vk):
         elif state.get("mode") == "waiting_for_auditorium":
             auditorium_query = text.strip()
             if auditorium_query:
+                # Принудительно загружаем аудитории, если кэш пуст
+                auditoriums = get_all_auditoriums()
+                if not auditoriums:
+                    send_keyboard(vk, peer_id, "⏳ Загрузка списка аудиторий, попробуйте через секунду", get_search_keyboard())
+                    return
+                
                 results = search_auditoriums_by_name(auditorium_query)
                 if len(results) == 1:
                     aud = results[0]
@@ -930,6 +936,12 @@ def handle_message(text, user_id, peer_id, from_chat, vk):
     aud_pattern = re.match(r'^(\d{2,5}[а-я]?)$', text_lower)
     if aud_pattern:
         aud_number = aud_pattern.group(1)
+        # Принудительно загружаем аудитории
+        auditoriums = get_all_auditoriums()
+        if not auditoriums:
+            send_keyboard(vk, peer_id, "⏳ Загрузка списка аудиторий, попробуйте через секунду", get_main_keyboard(bool(get_user_group(user_id))))
+            return
+        
         results = search_auditoriums_by_name(aud_number)
         if len(results) == 1:
             aud = results[0]
@@ -1110,6 +1122,12 @@ def handle_message(text, user_id, peer_id, from_chat, vk):
     if text_lower.startswith("аудитория "):
         aud_name = text_lower.replace("аудитория ", "").strip()
         if aud_name:
+            # Принудительно загружаем аудитории
+            auditoriums = get_all_auditoriums()
+            if not auditoriums:
+                send_keyboard(vk, peer_id, "⏳ Загрузка списка аудиторий, попробуйте через секунду", get_main_keyboard(bool(get_user_group(user_id))))
+                return
+            
             results = search_auditoriums_by_name(aud_name)
             if len(results) == 1:
                 aud = results[0]
@@ -1206,7 +1224,7 @@ def handle_message(text, user_id, peer_id, from_chat, vk):
         send_keyboard(vk, peer_id, "❓ Неизвестная команда. Напишите `помощь`", get_main_keyboard(True))
     else:
         send_keyboard(vk, peer_id, "❓ Неизвестная команда. Напишите `помощь`", get_main_keyboard(False))
-
+        
 # ========== ЗАПУСК ==========
 def main():
     print("🚀 Запуск Тони Диспетчер - Бот с расписанием СГУ")
