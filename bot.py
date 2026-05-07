@@ -391,7 +391,7 @@ def format_lessons(lessons, title, date):
     return result
 
 def format_week_schedule(lessons_by_date, title, start_date, end_date):
-    """Расписание на неделю (компактно)"""
+    """Расписание на неделю (аккуратно, как на один день)"""
     if not lessons_by_date:
         start_obj = datetime.strptime(start_date, "%Y-%m-%d")
         end_obj = datetime.strptime(end_date, "%Y-%m-%d")
@@ -400,7 +400,7 @@ def format_week_schedule(lessons_by_date, title, start_date, end_date):
     start_obj = datetime.strptime(start_date, "%Y-%m-%d")
     end_obj = datetime.strptime(end_date, "%Y-%m-%d")
     result = f"{title}\n📆 {start_obj.strftime('%d.%m')} – {end_obj.strftime('%d.%m.%Y')}\n"
-    result += "─" * 24 + "\n"  # короткая линия вместо =====
+    result += "─" * 24 + "\n"
     
     for date, lessons in sorted(lessons_by_date.items()):
         if not lessons:
@@ -409,7 +409,7 @@ def format_week_schedule(lessons_by_date, title, start_date, end_date):
         weekday = get_weekday_rus(date_obj.weekday())
         date_short = date_obj.strftime("%d.%m")
         result += f"\n📌 {weekday.upper()} ({date_short})\n"
-        result += "·" * 42 + "\n"  # точки вместо длинной линии
+        result += "─" * 24 + "\n"  # Такая же линия, как в начале
         
         for lesson in sorted(lessons, key=lambda x: x.get("начало", "00:00")):
             time_start = lesson.get("начало", "")
@@ -418,24 +418,16 @@ def format_week_schedule(lessons_by_date, title, start_date, end_date):
             teacher = lesson.get("преподаватель", "")
             room = lesson.get("аудитория", "")
             
-            clean_discipline = discipline
-            lesson_type_short = ""
-            if discipline.startswith("лек "):
-                clean_discipline = discipline[4:]
-                lesson_type_short = "ЛЕК"
-            elif discipline.startswith("пр "):
-                clean_discipline = discipline[3:]
-                lesson_type_short = "ПРАК"
-            elif discipline.startswith("лаб "):
-                clean_discipline = discipline[4:]
-                lesson_type_short = "ЛАБ"
+            lesson_type, clean_discipline = parse_lesson_type(discipline)
             
-            result += f"⏰ {time_start}–{time_end}"
-            if lesson_type_short:
-                result += f"  [{lesson_type_short}]"
-            result += f"\n   📚 {clean_discipline}\n"
-            result += f"   👨‍🏫 {teacher}  |  🏫 {room}\n"
-        result += ""
+            result += f"⏰ {time_start}–{time_end}\n"
+            if lesson_type:
+                result += f"{lesson_type}\n"
+            result += f"📚 {clean_discipline}\n"
+            result += f"👨‍🏫 {teacher}  |  🏫 {room}\n"
+            result += "•" * 42 + "\n"  # Такие же точки, как в одном дне
+        
+        result += ""  # Пустая строка между днями
     
     return result
     
