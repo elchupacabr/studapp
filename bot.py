@@ -834,7 +834,7 @@ def send_message(vk, peer_id, message):
 user_states = {}
 
     # Текстовые команды
-    if text_lower.startswith("преподаватель "):
+if text_lower.startswith("преподаватель "):
         teacher_name = text_lower.replace("преподаватель ", "").strip()
         if teacher_name:
             results = search_teachers_by_name(teacher_name)
