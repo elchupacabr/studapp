@@ -1151,8 +1151,7 @@ def handle_message(text, user_id, peer_id, from_chat, vk):
         )
         send_keyboard(vk, peer_id, help_text, get_main_keyboard(user_has_group=bool(user_group)))
         return
-    
-    # Текстовые команды (преподаватель, аудитория, выбрать, группы, найди, моя группа, статус, помощь)
+        # Текстовые команды
     if text_lower.startswith("преподаватель "):
         teacher_name = text_lower.replace("преподаватель ", "").strip()
         if teacher_name:
