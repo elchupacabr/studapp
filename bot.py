@@ -1167,7 +1167,7 @@ def handle_message(text, user_id, peer_id, from_chat, vk):
 
 # ===== ПРОВЕРКА НА ПРОСТОЙ НОМЕР АУДИТОРИИ (цифры или цифры с буквой) =====
 # Шаблон для поиска аудитории: просто цифры или цифры + буква (например 2349, 2349ж, 12212)
-aud_pattern = re.match(r'^(\d{3,5}[а-я]?)$', text_lower)
+aud_pattern = re.match(r'^(\d{2,5}[а-я]?)$', text_lower)
 if aud_pattern:
     aud_number = aud_pattern.group(1)
     # Ищем аудиторию по точному совпадению
