@@ -855,7 +855,7 @@ if text_lower.startswith("преподаватель "):
             send_keyboard(vk, peer_id, "❓ Напишите фамилию преподавателя", get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
         return
     
-    if text_lower.startswith("аудитория "):
+if text_lower.startswith("аудитория "):
         aud_name = text_lower.replace("аудитория ", "").strip()
         if aud_name:
             results = search_auditoriums_by_name(aud_name)
