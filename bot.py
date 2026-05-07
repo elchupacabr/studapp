@@ -370,7 +370,7 @@ def format_lessons(lessons, title, date):
     
     date_obj = datetime.strptime(date, "%Y-%m-%d")
     result = f"{title}\n📅 {date_obj.strftime('%d.%m.%Y')} ({get_weekday_rus(date_obj.weekday())})\n"
-    result += "─" * 36 + "\n"  # короткая линия вместо =====
+    result += "─" * 26 + "\n"  # короткая линия вместо =====
     
     for lesson in sorted(lessons, key=lambda x: x.get("начало", "00:00")):
         time_start = lesson.get("начало", "")
@@ -400,7 +400,7 @@ def format_week_schedule(lessons_by_date, title, start_date, end_date):
     start_obj = datetime.strptime(start_date, "%Y-%m-%d")
     end_obj = datetime.strptime(end_date, "%Y-%m-%d")
     result = f"{title}\n📆 {start_obj.strftime('%d.%m')} – {end_obj.strftime('%d.%m.%Y')}\n"
-    result += "─" * 36 + "\n"  # короткая линия вместо =====
+    result += "─" * 26 + "\n"  # короткая линия вместо =====
     
     for date, lessons in sorted(lessons_by_date.items()):
         if not lessons:
