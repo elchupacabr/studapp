@@ -1164,6 +1164,40 @@ def handle_message(text, user_id, peer_id, from_chat, vk):
         else:
             send_keyboard(vk, peer_id, "❓ Напишите номер аудитории", get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
         return
+
+# ===== ПРОВЕРКА НА ПРОСТОЙ НОМЕР АУДИТОРИИ (цифры или цифры с буквой) =====
+# Шаблон для поиска аудитории: просто цифры или цифры + буква (например 2349, 2349ж, 12212)
+aud_pattern = re.match(r'^(\d{3,5}[а-я]?)$', text_lower)
+if aud_pattern:
+    aud_number = aud_pattern.group(1)
+    # Ищем аудиторию по точному совпадению
+    results = search_auditoriums_by_name(aud_number)
+    if len(results) == 1:
+        aud = results[0]
+        set_user_selection(user_id, "auditorium", aud["name"], aud["id"])
+        answer = get_schedule_for_auditorium_today(aud["id"], aud["name"])
+        send_keyboard(vk, peer_id, answer, get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
+        return
+    elif len(results) > 1:
+        message = f"🔍 Найдено аудиторий по запросу `{aud_number}`:\n\n"
+        for a in results[:10]:
+            message += f"📌 {a['name']}\n"
+        message += f"\n💡 Уточните запрос (например, `аудитория {results[0]['name']}`)"
+        send_keyboard(vk, peer_id, message, get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
+        return
+    else:
+        # Если не нашли точное совпадение, ищем по частичному
+        results = search_auditoriums_by_name(aud_number)
+        if results:
+            message = f"🔍 Похожие аудитории по запросу `{aud_number}`:\n\n"
+            for a in results[:10]:
+                message += f"📌 {a['name']}\n"
+            message += f"\n💡 Уточните запрос (например, `аудитория {results[0]['name']}`)"
+            send_keyboard(vk, peer_id, message, get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
+        else:
+            send_keyboard(vk, peer_id, f"❌ Аудитория `{aud_number}` не найдена", get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
+        return
+
     
     if text_lower.startswith("выбрать "):
         group_name = text_lower.replace("выбрать ", "").strip()
