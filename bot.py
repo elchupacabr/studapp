@@ -878,7 +878,7 @@ if text_lower.startswith("аудитория "):
     
     # ===== ПРОВЕРКА НА ПРОСТОЙ НОМЕР АУДИТОРИИ (цифры или цифры с буквой) =====
     # Это сработает, если пользователь ввёл просто "1301" без слова "аудитория"
-    aud_pattern = re.match(r'^(\d{2,5}[а-я]?)$', text_lower)
+aud_pattern = re.match(r'^(\d{2,5}[а-я]?)$', text_lower)
     if aud_pattern:
         aud_number = aud_pattern.group(1)
         results = search_auditoriums_by_name(aud_number)
