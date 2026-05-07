@@ -833,8 +833,303 @@ def send_message(vk, peer_id, message):
 # ========== ОБРАБОТЧИК ==========
 user_states = {}
 
-    # Текстовые команды
-if text_lower.startswith("преподаватель "):
+def handle_message(text, user_id, peer_id, from_chat, vk):
+    text_lower = text.lower().strip()
+    user_id_str = str(user_id)
+    current_selection = get_user_selection(user_id)
+    
+    # Парсим дату из текста
+    target_date = parse_date_from_text(text)
+    
+    # ===== КОМАНДА "неделя на ДД.ММ" или "неделя на ДД.ММ.ГГГГ" =====
+    if target_date and ("неделя" in text_lower or "week" in text_lower):
+        if current_selection["type"] == "teacher":
+            answer = get_schedule_for_teacher_week(current_selection["id"], current_selection["name"], target_date)
+        elif current_selection["type"] == "auditorium":
+            answer = get_schedule_for_auditorium_week(current_selection["id"], current_selection["name"], target_date)
+        else:
+            user_group = get_user_group(user_id)
+            if user_group:
+                answer = get_schedule_for_group_week(user_group["group_id"], target_date)
+            else:
+                send_keyboard(vk, peer_id, "❓ Сначала выберите группу!", get_main_keyboard(user_has_group=False))
+                return
+        send_keyboard(vk, peer_id, answer, get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
+        return
+    
+    # ===== КОМАНДА "расписание на ДД.ММ" или "расписание на ДД.ММ.ГГГГ" =====
+    if target_date and ("расписание" in text_lower or "schedule" in text_lower):
+        if current_selection["type"] == "teacher":
+            answer = get_schedule_for_teacher_day(current_selection["id"], current_selection["name"], target_date)
+        elif current_selection["type"] == "auditorium":
+            answer = get_schedule_for_auditorium_day(current_selection["id"], current_selection["name"], target_date)
+        else:
+            user_group = get_user_group(user_id)
+            if user_group:
+                answer = get_schedule_for_group_day(user_group["group_id"], target_date)
+            else:
+                send_keyboard(vk, peer_id, "❓ Сначала выберите группу!", get_main_keyboard(user_has_group=False))
+                return
+        send_keyboard(vk, peer_id, answer, get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
+        return
+    
+    # Кнопка НАЗАД
+    if text == "◀️ НАЗАД":
+        if user_id_str in user_states:
+            del user_states[user_id_str]
+        clear_user_selection(user_id)
+        user_group = get_user_group(user_id)
+        send_keyboard(vk, peer_id, "🔙 Вы вернулись в главное меню", get_main_keyboard(user_has_group=bool(user_group)))
+        return
+    
+    # Кнопка СБРОСИТЬ ВЫБОР
+    if text == "🗑️ СБРОСИТЬ ВЫБОР":
+        if user_id_str in user_states:
+            del user_states[user_id_str]
+        clear_user_selection(user_id)
+        user_group = get_user_group(user_id)
+        send_keyboard(vk, peer_id, "🗑️ Выбор сброшен. Теперь кнопки показывают расписание вашей группы.", get_main_keyboard(user_has_group=bool(user_group)))
+        return
+    
+    # Кнопка ОТМЕНА
+    if text == "❌ ОТМЕНА":
+        if user_id_str in user_states:
+            del user_states[user_id_str]
+        user_group = get_user_group(user_id)
+        send_keyboard(vk, peer_id, "✅ Действие отменено", get_main_keyboard(user_has_group=bool(user_group)))
+        return
+    
+    # Состояния
+    if user_id_str in user_states:
+        state = user_states[user_id_str]
+        
+        if state.get("mode") == "waiting_for_group":
+            group_name = text.strip()
+            group_id, found_name = find_group_by_name(group_name)
+            if group_id:
+                set_user_group(user_id, group_id, found_name)
+                clear_user_selection(user_id)
+                del user_states[user_id_str]
+                send_keyboard(vk, peer_id, f"✅ Группа `{found_name}` сохранена!", get_main_keyboard(user_has_group=True))
+            else:
+                send_keyboard(vk, peer_id, f"❌ Группа `{group_name}` не найдена.\nПопробуйте `📚 ВСЕ ГРУППЫ`", get_search_keyboard())
+            return
+        
+        elif state.get("mode") == "waiting_for_teacher":
+            teacher_query = text.strip()
+            if teacher_query:
+                results = search_teachers_by_name(teacher_query)
+                if len(results) == 1:
+                    teacher = results[0]
+                    set_user_selection(user_id, "teacher", teacher["name"], teacher["id"])
+                    del user_states[user_id_str]
+                    answer = get_schedule_for_teacher_today(teacher["id"], teacher["name"])
+                    send_keyboard(vk, peer_id, answer, get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
+                elif len(results) > 1:
+                    message = f"🔍 Найдено преподавателей по запросу `{teacher_query}`:\n\n"
+                    for t in results[:10]:
+                        message += f"📌 {t['name']}\n"
+                    message += f"\n💡 Уточните запрос (например, `преподаватель {results[0]['name']}`)"
+                    send_keyboard(vk, peer_id, message, get_search_keyboard())
+                else:
+                    send_keyboard(vk, peer_id, f"❌ Преподаватель `{teacher_query}` не найден", get_search_keyboard())
+            else:
+                send_keyboard(vk, peer_id, "❓ Введите фамилию преподавателя", get_search_keyboard())
+            return
+        
+        elif state.get("mode") == "waiting_for_auditorium":
+            auditorium_query = text.strip()
+            if auditorium_query:
+                # Проверяем, является ли введённое значение просто номером (цифры или цифры+буква)
+                aud_number_match = re.match(r'^(\d{2,5}[а-я]?)$', auditorium_query.lower())
+                if aud_number_match:
+                    aud_number = aud_number_match.group(1)
+                    results = search_auditoriums_by_name(aud_number)
+                else:
+                    results = search_auditoriums_by_name(auditorium_query)
+                
+                if len(results) == 1:
+                    aud = results[0]
+                    set_user_selection(user_id, "auditorium", aud["name"], aud["id"])
+                    del user_states[user_id_str]
+                    answer = get_schedule_for_auditorium_today(aud["id"], aud["name"])
+                    send_keyboard(vk, peer_id, answer, get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
+                elif len(results) > 1:
+                    message = f"🔍 Найдено аудиторий по запросу `{auditorium_query}`:\n\n"
+                    for a in results[:10]:
+                        message += f"📌 {a['name']}\n"
+                    message += f"\n💡 Уточните запрос (например, `аудитория {results[0]['name']}`)"
+                    send_keyboard(vk, peer_id, message, get_search_keyboard())
+                else:
+                    send_keyboard(vk, peer_id, f"❌ Аудитория `{auditorium_query}` не найдена", get_search_keyboard())
+            else:
+                send_keyboard(vk, peer_id, "❓ Введите номер аудитории", get_search_keyboard())
+            return
+    
+    # Обработка кнопок
+    if text == "📚 ВЫБРАТЬ ГРУППУ":
+        user_states[user_id_str] = {"mode": "waiting_for_group"}
+        send_keyboard(vk, peer_id, "📝 Напишите название группы (например: `иктс тб31`)", get_search_keyboard())
+        return
+    
+    if text == "🔍 ПОИСК ГРУППЫ":
+        send_keyboard(vk, peer_id, "🔍 Введите ключевое слово для поиска группы", get_search_keyboard())
+        return
+    
+    if text == "📚 ВСЕ ГРУППЫ" or text == "📋 ВСЕ ГРУППЫ":
+        message = get_groups_list_message(1)
+        send_keyboard(vk, peer_id, message, get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
+        return
+    
+    if text == "👨‍🏫 ПРЕПОДАВАТЕЛИ":
+        message = get_teachers_list_message(1)
+        user_states[user_id_str] = {"mode": "waiting_for_teacher"}
+        send_keyboard(vk, peer_id, message, get_search_keyboard())
+        return
+    
+    if text == "🏢 АУДИТОРИИ":
+        message = get_auditoriums_list_message(1)
+        user_states[user_id_str] = {"mode": "waiting_for_auditorium"}
+        send_keyboard(vk, peer_id, message, get_search_keyboard())
+        return
+    
+    if text == "📅 РАСПИСАНИЕ":
+        if current_selection["type"] == "teacher":
+            answer = get_schedule_for_teacher_today(current_selection["id"], current_selection["name"])
+        elif current_selection["type"] == "auditorium":
+            answer = get_schedule_for_auditorium_today(current_selection["id"], current_selection["name"])
+        else:
+            user_group = get_user_group(user_id)
+            if user_group:
+                answer = get_schedule_for_group_today(user_group["group_id"])
+            else:
+                send_keyboard(vk, peer_id, "❓ Сначала выберите группу!", get_main_keyboard(user_has_group=False))
+                return
+        send_keyboard(vk, peer_id, answer, get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
+        return
+    
+    if text == "📆 НЕДЕЛЯ":
+        today = datetime.now().strftime("%Y-%m-%d")
+        if current_selection["type"] == "teacher":
+            answer = get_schedule_for_teacher_week(current_selection["id"], current_selection["name"], today)
+        elif current_selection["type"] == "auditorium":
+            answer = get_schedule_for_auditorium_week(current_selection["id"], current_selection["name"], today)
+        else:
+            user_group = get_user_group(user_id)
+            if user_group:
+                answer = get_schedule_for_group_week(user_group["group_id"], today)
+            else:
+                send_keyboard(vk, peer_id, "❓ Сначала выберите группу!", get_main_keyboard(user_has_group=False))
+                return
+        send_keyboard(vk, peer_id, answer, get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
+        return
+    
+    if text == "⏩ СЛЕДУЮЩАЯ НЕДЕЛЯ":
+        next_week_date = (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d")
+        if current_selection["type"] == "teacher":
+            answer = get_schedule_for_teacher_week(current_selection["id"], current_selection["name"], next_week_date)
+        elif current_selection["type"] == "auditorium":
+            answer = get_schedule_for_auditorium_week(current_selection["id"], current_selection["name"], next_week_date)
+        else:
+            user_group = get_user_group(user_id)
+            if user_group:
+                answer = get_schedule_for_group_week(user_group["group_id"], next_week_date)
+            else:
+                send_keyboard(vk, peer_id, "❓ Сначала выберите группу!", get_main_keyboard(user_has_group=False))
+                return
+        send_keyboard(vk, peer_id, answer, get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
+        return
+    
+    if text == "🎯 БЛИЖАЙШЕЕ":
+        if current_selection["type"] in ["teacher", "auditorium"]:
+            send_keyboard(vk, peer_id, "🎯 Ближайшее занятие доступно только для групп", get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
+        else:
+            user_group = get_user_group(user_id)
+            if user_group:
+                today = datetime.now().strftime("%Y-%m-%d")
+                lessons, _ = fetch_schedule_by_group(user_group["group_id"], today)
+                if lessons:
+                    answer = get_schedule_for_group_today(user_group["group_id"])
+                else:
+                    found = False
+                    for i in range(1, 30):
+                        next_date = (datetime.now() + timedelta(days=i)).strftime("%Y-%m-%d")
+                        lessons, _ = fetch_schedule_by_group(user_group["group_id"], next_date)
+                        if lessons:
+                            group_name = get_group_name_by_id(user_group["group_id"])
+                            answer = format_lessons(lessons, f"📅 РАСПИСАНИЕ ГРУППЫ {group_name}", next_date)
+                            answer += f"\n\n📆 Следующее занятие: {datetime.strptime(next_date, '%Y-%m-%d').strftime('%d.%m.%Y')}"
+                            found = True
+                            break
+                    if not found:
+                        answer = "📭 Ближайших занятий не найдено"
+                send_keyboard(vk, peer_id, answer, get_main_keyboard(user_has_group=True))
+            else:
+                send_keyboard(vk, peer_id, "❓ Сначала выберите группу!", get_main_keyboard(user_has_group=False))
+        return
+    
+    if text == "🏫 МОЯ ГРУППА":
+        user_group = get_user_group(user_id)
+        if user_group:
+            send_keyboard(vk, peer_id, f"📌 Ваша группа: `{user_group['group_name']}`", get_main_keyboard(user_has_group=True))
+        else:
+            send_keyboard(vk, peer_id, "❓ Группа не выбрана. Нажмите `📚 ВЫБРАТЬ ГРУППУ`", get_main_keyboard(user_has_group=False))
+        return
+    
+    if text == "🖥️ СТАТУС САЙТА":
+        answer = get_status_message()
+        send_keyboard(vk, peer_id, answer, get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
+        return
+    
+    if text == "❓ ПОМОЩЬ":
+        user_group = get_user_group(user_id)
+        selection = get_user_selection(user_id)
+        selection_text = ""
+        if selection["type"] == "teacher":
+            selection_text = f"\n🎯 Текущий выбор: преподаватель `{selection['name']}`"
+        elif selection["type"] == "auditorium":
+            selection_text = f"\n🎯 Текущий выбор: аудитория `{selection['name']}`"
+        
+        # Формируем текст помощи в зависимости от того, есть ли группа
+        if user_group:
+            group_text = f"📌 Ваша группа: `{user_group['group_name']}`"
+        else:
+            group_text = "❓ Группа не выбрана"
+        
+        help_text = (
+            "🤖 *Тони Диспетчер - Бот с расписанием СГУ*\n\n"
+            f"{group_text}"
+            f"{selection_text}\n\n"
+            "✨ *Что умеет бот:*\n\n"
+            "**По группам:**\n"
+            "• 📅 РАСПИСАНИЕ - сегодня\n"
+            "• 📆 НЕДЕЛЯ - текущая неделя\n"
+            "• ⏩ СЛЕДУЮЩАЯ НЕДЕЛЯ\n"
+            "• 🎯 БЛИЖАЙШЕЕ - следующее занятие\n\n"
+            "**По преподавателям:**\n"
+            "• 👨‍🏫 ПРЕПОДАВАТЕЛИ - список\n"
+            "• Напишите фамилию для выбора\n\n"
+            "**По аудиториям:**\n"
+            "• 🏢 АУДИТОРИИ - список\n"
+            "• Напишите номер для выбора\n\n"
+            "**Поиск по дате:**\n"
+            "• `расписание на 21.05` - на конкретный день\n"
+            "• `неделя на 21.05` - на неделю (с 18 по 24 мая)\n\n"
+            "**Управление:**\n"
+            "• 📚 ВЫБРАТЬ ГРУППУ - задать группу\n"
+            "• 🗑️ СБРОСИТЬ ВЫБОР - вернуться к группе\n"
+            "• ◀️ НАЗАД - из любого меню\n"
+            "• ❌ ОТМЕНА - отменить поиск\n\n"
+            "**Текстовые команды:**\n"
+            "• `расписание иктс тб31` - расписание группы\n"
+            "• `преподаватель Иванов` - выбрать преподавателя\n"
+            "• `аудитория 2349` - выбрать аудиторию\n\n"
+            "💡 *Совет:* Используйте кнопки для быстрого доступа!"
+        )
+        send_keyboard(vk, peer_id, help_text, get_main_keyboard(user_has_group=bool(user_group)))
+        return
+        # Текстовые команды
+    if text_lower.startswith("преподаватель "):
         teacher_name = text_lower.replace("преподаватель ", "").strip()
         if teacher_name:
             results = search_teachers_by_name(teacher_name)
@@ -855,7 +1150,7 @@ if text_lower.startswith("преподаватель "):
             send_keyboard(vk, peer_id, "❓ Напишите фамилию преподавателя", get_main_keyboard(user_has_group=bool(get_user_group(user_id))))
         return
     
-if text_lower.startswith("аудитория "):
+    if text_lower.startswith("аудитория "):
         aud_name = text_lower.replace("аудитория ", "").strip()
         if aud_name:
             results = search_auditoriums_by_name(aud_name)
@@ -878,7 +1173,7 @@ if text_lower.startswith("аудитория "):
     
     # ===== ПРОВЕРКА НА ПРОСТОЙ НОМЕР АУДИТОРИИ (цифры или цифры с буквой) =====
     # Это сработает, если пользователь ввёл просто "1301" без слова "аудитория"
-aud_pattern = re.match(r'^(\d{2,5}[а-я]?)$', text_lower)
+    aud_pattern = re.match(r'^(\d{2,5}[а-я]?)$', text_lower)
     if aud_pattern:
         aud_number = aud_pattern.group(1)
         results = search_auditoriums_by_name(aud_number)
@@ -955,7 +1250,7 @@ aud_pattern = re.match(r'^(\d{2,5}[а-я]?)$', text_lower)
             group_text = "❓ Группа не выбрана"
         
         help_text = (
-            f"🤖 *Тони Диспетчер - Бот с расписанием *\n\n"
+            f"🤖 *Тони Диспетчер - Бот с расписанием СГУ*\n\n"
             f"{group_text}"
             f"{selection_text}\n\n"
             "✨ *Как пользоваться:*\n\n"
@@ -990,9 +1285,10 @@ aud_pattern = re.match(r'^(\d{2,5}[а-я]?)$', text_lower)
         send_keyboard(vk, peer_id, "❓ Неизвестная команда. Напишите `помощь` для списка команд", get_main_keyboard(user_has_group=False))
 
 
+
 # ========== ЗАПУСК ==========
 def main():
-    print("🚀 Запуск Тони Диспетчер - Бот с расписанием ")
+    print("🚀 Запуск Тони Диспетчер - Бот с расписанием СГУ")
     print("=" * 40)
     
     start_self_ping()
@@ -1035,3 +1331,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
