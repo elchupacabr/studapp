@@ -1065,28 +1065,83 @@ def handle_message(text, user_id, peer_id, from_chat, vk):
                 send_keyboard(vk, peer_id, "❓ Введите фамилию преподавателя", get_search_keyboard())
             return
         
-        elif state.get("mode") == "waiting_for_auditorium":
-            auditorium_query = text.strip()
-            if auditorium_query:
-                results = search_auditoriums_by_name(auditorium_query)
-                if len(results) == 1:
-                    aud = results[0]
-                    set_user_selection(user_id, "auditorium", aud["name"], aud["id"])
-                    del user_states[user_id_str]
-                    answer = get_schedule_for_auditorium_today(aud["id"], aud["name"])
-                    send_keyboard(vk, peer_id, answer, get_main_keyboard(bool(get_user_group(user_id))))
-                elif len(results) > 1:
-                    message = f"🔍 Найдено аудиторий по запросу `{auditorium_query}`:\n\n"
-                    for a in results[:10]:
-                        message += f"📌 {a['name']}\n"
-                    message += f"\n💡 Уточните запрос (например, `аудитория {results[0]['name']}`)"
-                    send_keyboard(vk, peer_id, message, get_search_keyboard())
-                else:
-                    send_keyboard(vk, peer_id, f"❌ Аудитория `{auditorium_query}` не найдена", get_search_keyboard())
-            else:
-                send_keyboard(vk, peer_id, "❓ Введите номер аудитории", get_search_keyboard())
-            return
-    
+elif state.get("mode") == "waiting_for_auditorium":
+    auditorium_query = text.strip()
+
+    if auditorium_query:
+
+        # Сначала ищем точное совпадение
+        exact = get_auditorium_by_exact_name(auditorium_query)
+
+        if exact:
+            results = [exact]
+        else:
+            results = search_auditoriums_by_name(auditorium_query)
+
+        if len(results) == 1:
+            aud = results[0]
+
+            set_user_selection(
+                user_id,
+                "auditorium",
+                aud["name"],
+                aud["id"]
+            )
+
+            del user_states[user_id_str]
+
+            answer = get_schedule_for_auditorium_today(
+                aud["id"],
+                aud["name"]
+            )
+
+            send_keyboard(
+                vk,
+                peer_id,
+                answer,
+                get_main_keyboard(bool(get_user_group(user_id)))
+            )
+
+        elif len(results) > 1:
+
+            message = (
+                f"🔍 Найдено аудиторий по запросу "
+                f"`{auditorium_query}`:\n\n"
+            )
+
+            for a in results[:10]:
+                message += f"📌 {a['name']}\n"
+
+            message += (
+                "\n💡 Уточните запрос "
+                f"(например: `аудитория {results[0]['name']}`)"
+            )
+
+            send_keyboard(
+                vk,
+                peer_id,
+                message,
+                get_search_keyboard()
+            )
+
+        else:
+            send_keyboard(
+                vk,
+                peer_id,
+                f"❌ Аудитория `{auditorium_query}` не найдена",
+                get_search_keyboard()
+            )
+
+    else:
+        send_keyboard(
+            vk,
+            peer_id,
+            "❓ Введите номер аудитории",
+            get_search_keyboard()
+        )
+
+    return
+
     # ===== ПРОВЕРКА НА ПРОСТОЙ НОМЕР АУДИТОРИИ (ВНЕ СОСТОЯНИЙ!) =====
     aud_pattern = re.match(r'^(\d{2,5}[а-я]?)$', text_lower)
     if aud_pattern:
