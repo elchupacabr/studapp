@@ -192,12 +192,14 @@ def get_all_auditoriums(year=None):
     current_time = datetime.now().timestamp()
     if auditoriums_cache["data"] and auditoriums_cache["year"] == year:
         if (current_time - auditoriums_cache["timestamp"]) < 86400:
+            print(f"📦 Аудитории из кэша: {len(auditoriums_cache['data'])} шт.")
             return auditoriums_cache["data"]
     try:
+        print(f"🔄 Загрузка аудиторий за {year}...")
         response = requests.get(API_AUDITORIUMS_URL, params={"year": year}, timeout=10)
         response.raise_for_status()
         data = response.json()
-        if data.get("data"):
+        if data.get("state") == 1 and data.get("data"):
             auditoriums_cache["data"] = data["data"]
             auditoriums_cache["timestamp"] = current_time
             auditoriums_cache["year"] = year
@@ -243,16 +245,36 @@ def search_teachers_by_name(query):
     return results[:20]
 
 def search_auditoriums_by_name(query):
+    """Поиск аудитории по названию (с поддержкой частичного совпадения)"""
     auditoriums = get_all_auditoriums()
     if not auditoriums:
         return []
-    query_lower = query.lower().strip()
+    # Нормализуем запрос (убираем тире, пробелы)
+    query_normalized = query.lower().strip().replace("-", "").replace(" ", "")
     results = []
     for aud in auditoriums:
         name = aud.get("name", "")
-        if query_lower in name.lower():
+        name_normalized = name.lower().replace("-", "").replace(" ", "")
+        # Ищем по полному совпадению или частичному
+        if query_normalized == name_normalized or query_normalized in name_normalized:
             results.append(aud)
-    return results[:20]
+        # Также ищем по оригинальному названию (например "1301" в "1-301")
+        elif query_normalized in name.lower().replace("-", ""):
+            results.append(aud)
+    # Сортируем по длине названия (короткие ближе)
+    results.sort(key=lambda x: len(x["name"]))
+    return results
+
+def get_auditorium_by_exact_name(name):
+    """Находит аудиторию по точному совпадению названия"""
+    auditoriums = get_all_auditoriums()
+    if not auditoriums:
+        return None
+    name_lower = name.lower().strip()
+    for aud in auditoriums:
+        if aud.get("name", "").lower() == name_lower:
+            return aud
+    return None
 
 # ========== НОРМАЛИЗАЦИЯ НАЗВАНИЙ ГРУПП ==========
 def normalize_group_name(name):
@@ -570,7 +592,8 @@ def get_auditoriums_list_message(page=1, per_page=20):
     result += "=" * 35 + "\n\n"
     for aud in auditoriums[start:end]:
         result += f"📌 {aud['name']}\n"
-    result += f"\n💡 Напишите `аудитория [номер]` для просмотра расписания"
+    result += f"\n💡 Напишите `аудитория [номер]` для просмотра расписания\n"
+    result += f"💡 Или просто введите номер (например: `1301`)"
     return result
 
 def search_auditoriums_message(keyword):
@@ -907,12 +930,6 @@ def handle_message(text, user_id, peer_id, from_chat, vk):
         elif state.get("mode") == "waiting_for_auditorium":
             auditorium_query = text.strip()
             if auditorium_query:
-                # Принудительно загружаем аудитории, если кэш пуст
-                auditoriums = get_all_auditoriums()
-                if not auditoriums:
-                    send_keyboard(vk, peer_id, "⏳ Загрузка списка аудиторий, попробуйте через секунду", get_search_keyboard())
-                    return
-                
                 results = search_auditoriums_by_name(auditorium_query)
                 if len(results) == 1:
                     aud = results[0]
@@ -924,7 +941,7 @@ def handle_message(text, user_id, peer_id, from_chat, vk):
                     message = f"🔍 Найдено аудиторий по запросу `{auditorium_query}`:\n\n"
                     for a in results[:10]:
                         message += f"📌 {a['name']}\n"
-                    message += f"\n💡 Уточните запрос"
+                    message += f"\n💡 Уточните запрос (например, `аудитория {results[0]['name']}`)"
                     send_keyboard(vk, peer_id, message, get_search_keyboard())
                 else:
                     send_keyboard(vk, peer_id, f"❌ Аудитория `{auditorium_query}` не найдена", get_search_keyboard())
@@ -932,16 +949,10 @@ def handle_message(text, user_id, peer_id, from_chat, vk):
                 send_keyboard(vk, peer_id, "❓ Введите номер аудитории", get_search_keyboard())
             return
     
-    # Проверка на простой номер аудитории (например "1301")
+    # ===== ПРОВЕРКА НА ПРОСТОЙ НОМЕР АУДИТОРИИ (аналог преподавателей) =====
     aud_pattern = re.match(r'^(\d{2,5}[а-я]?)$', text_lower)
     if aud_pattern:
         aud_number = aud_pattern.group(1)
-        # Принудительно загружаем аудитории
-        auditoriums = get_all_auditoriums()
-        if not auditoriums:
-            send_keyboard(vk, peer_id, "⏳ Загрузка списка аудиторий, попробуйте через секунду", get_main_keyboard(bool(get_user_group(user_id))))
-            return
-        
         results = search_auditoriums_by_name(aud_number)
         if len(results) == 1:
             aud = results[0]
@@ -953,7 +964,7 @@ def handle_message(text, user_id, peer_id, from_chat, vk):
             message = f"🔍 Найдено аудиторий по запросу `{aud_number}`:\n\n"
             for a in results[:10]:
                 message += f"📌 {a['name']}\n"
-            message += f"\n💡 Уточните запрос"
+            message += f"\n💡 Уточните запрос (например, `аудитория {results[0]['name']}`)"
             send_keyboard(vk, peer_id, message, get_main_keyboard(bool(get_user_group(user_id))))
             return
         else:
@@ -1122,12 +1133,6 @@ def handle_message(text, user_id, peer_id, from_chat, vk):
     if text_lower.startswith("аудитория "):
         aud_name = text_lower.replace("аудитория ", "").strip()
         if aud_name:
-            # Принудительно загружаем аудитории
-            auditoriums = get_all_auditoriums()
-            if not auditoriums:
-                send_keyboard(vk, peer_id, "⏳ Загрузка списка аудиторий, попробуйте через секунду", get_main_keyboard(bool(get_user_group(user_id))))
-                return
-            
             results = search_auditoriums_by_name(aud_name)
             if len(results) == 1:
                 aud = results[0]
@@ -1224,7 +1229,7 @@ def handle_message(text, user_id, peer_id, from_chat, vk):
         send_keyboard(vk, peer_id, "❓ Неизвестная команда. Напишите `помощь`", get_main_keyboard(True))
     else:
         send_keyboard(vk, peer_id, "❓ Неизвестная команда. Напишите `помощь`", get_main_keyboard(False))
-        
+
 # ========== ЗАПУСК ==========
 def main():
     print("🚀 Запуск Тони Диспетчер - Бот с расписанием СГУ")
@@ -1234,8 +1239,13 @@ def main():
     get_available_years()
     get_current_academic_year()
     get_all_groups()
-    get_all_teachers()
-    get_all_auditoriums()
+    
+    # Принудительная загрузка списков
+    print("🔄 Принудительная загрузка списков...")
+    aud = get_all_auditoriums()
+    print(f"📊 Аудитории загружены: {len(aud)} шт.")
+    teach = get_all_teachers()
+    print(f"📊 Преподаватели загружены: {len(teach)} шт.")
     
     vk_session = vk_api.VkApi(token=VK_TOKEN)
     vk = vk_session.get_api()
@@ -1247,6 +1257,7 @@ def main():
     print("📡 Функции: группы, преподаватели, аудитории")
     print("⚡ Параллельные запросы для быстрого расписания на неделю")
     print("📅 Поиск по дате: `расписание на 21.05` или `неделя на 21.05`")
+    print("🏫 Поиск аудитории: `1301` или `аудитория 1301`")
     print("🕐 Автоматическая проверка обновлений: каждые 6 часов")
     print("=" * 40)
     
