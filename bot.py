@@ -404,6 +404,28 @@ def fetch_schedule_by_auditorium(auditorium_id, date=None):
     except Exception as e:
         return None, f"Ошибка: {e}"
 
+def fetch_schedule_by_auditorium_name(auditorium_name, date=None):
+    """Ищет расписание аудитории по её НАЗВАНИЮ (без ID)"""
+    if date is None:
+        date = datetime.now().strftime("%Y-%m-%d")
+    
+    # Получаем список групп
+    all_groups = get_all_groups()
+    all_lessons = []
+    
+    # Перебираем группы (первые 20 для скорости)
+    for group in all_groups[:20]:
+        group_id = group["id"]
+        lessons, error = fetch_schedule_by_group(group_id, date)
+        if lessons:
+            for lesson in lessons:
+                room = lesson.get("аудитория", "")
+                # Сравниваем названия аудиторий (нормализованные)
+                if room.lower().replace("-", "").replace(" ", "") == auditorium_name.lower().replace("-", "").replace(" ", ""):
+                    all_lessons.append(lesson)
+    
+    return all_lessons, None
+
 
 def fetch_week_schedule_parallel(fetch_func, identifier, target_date):
     start_date, end_date = get_week_for_date(target_date)
@@ -571,8 +593,14 @@ def get_schedule_for_teacher_today(teacher_id, teacher_name):
     return get_schedule_for_teacher_day(teacher_id, teacher_name, datetime.now().strftime("%Y-%m-%d"))
 
 
-def get_schedule_for_auditorium_today(auditorium_id, auditorium_name):
-    return get_schedule_for_auditorium_day(auditorium_id, auditorium_name, datetime.now().strftime("%Y-%m-%d"))
+def get_schedule_for_auditorium_today(auditorium_name):
+    """Расписание аудитории на сегодня (по названию)"""
+    today = datetime.now().strftime("%Y-%m-%d")
+    lessons, error = fetch_schedule_by_auditorium_name(auditorium_name, today)
+    if error:
+        return error
+    title = f"🏫 РАСПИСАНИЕ АУДИТОРИИ {auditorium_name}"
+    return format_lessons(lessons, title, today)
 
 
 def get_schedule_for_group_current_week(group_id):
