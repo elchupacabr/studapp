@@ -995,7 +995,6 @@ def send_keyboard(vk, peer_id, message, keyboard):
 def send_message(vk, peer_id, message):
     vk.messages.send(peer_id=peer_id, message=message, random_id=0)
 
-
 # ========== ОБРАБОТЧИК ==========
 user_states = {}
 
@@ -1100,83 +1099,34 @@ def handle_message(text, user_id, peer_id, from_chat, vk):
                 send_keyboard(vk, peer_id, "❓ Введите фамилию преподавателя", get_search_keyboard())
             return
         
-elif state.get("mode") == "waiting_for_auditorium":
-    auditorium_query = text.strip()
-
-    if auditorium_query:
-
-        # Сначала ищем точное совпадение
-        exact = get_auditorium_by_exact_name(auditorium_query)
-
-        if exact:
-            results = [exact]
-        else:
-            results = search_auditoriums_by_name(auditorium_query)
-
-        if len(results) == 1:
-            aud = results[0]
-
-            set_user_selection(
-                user_id,
-                "auditorium",
-                aud["name"],
-                aud["id"]
-            )
-
-            del user_states[user_id_str]
-
-            answer = get_schedule_for_auditorium_today(
-                aud["id"],
-                aud["name"]
-            )
-
-            send_keyboard(
-                vk,
-                peer_id,
-                answer,
-                get_main_keyboard(bool(get_user_group(user_id)))
-            )
-
-        elif len(results) > 1:
-
-            message = (
-                f"🔍 Найдено аудиторий по запросу "
-                f"`{auditorium_query}`:\n\n"
-            )
-
-            for a in results[:10]:
-                message += f"📌 {a['name']}\n"
-
-            message += (
-                "\n💡 Уточните запрос "
-                f"(например: `аудитория {results[0]['name']}`)"
-            )
-
-            send_keyboard(
-                vk,
-                peer_id,
-                message,
-                get_search_keyboard()
-            )
-
-        else:
-            send_keyboard(
-                vk,
-                peer_id,
-                f"❌ Аудитория `{auditorium_query}` не найдена",
-                get_search_keyboard()
-            )
-
-    else:
-        send_keyboard(
-            vk,
-            peer_id,
-            "❓ Введите номер аудитории",
-            get_search_keyboard()
-        )
-
-    return
-
+        elif state.get("mode") == "waiting_for_auditorium":
+            auditorium_query = text.strip()
+            if auditorium_query:
+                # Сначала ищем точное совпадение
+                exact = get_auditorium_by_exact_name(auditorium_query)
+                if exact:
+                    results = [exact]
+                else:
+                    results = search_auditoriums_by_name(auditorium_query)
+                
+                if len(results) == 1:
+                    aud = results[0]
+                    set_user_selection(user_id, "auditorium", aud["name"], aud["id"])
+                    del user_states[user_id_str]
+                    answer = get_schedule_for_auditorium_today(aud["id"], aud["name"])
+                    send_keyboard(vk, peer_id, answer, get_main_keyboard(bool(get_user_group(user_id))))
+                elif len(results) > 1:
+                    message = f"🔍 Найдено аудиторий по запросу `{auditorium_query}`:\n\n"
+                    for a in results[:10]:
+                        message += f"📌 {a['name']}\n"
+                    message += f"\n💡 Уточните запрос (например, `аудитория {results[0]['name']}`)"
+                    send_keyboard(vk, peer_id, message, get_search_keyboard())
+                else:
+                    send_keyboard(vk, peer_id, f"❌ Аудитория `{auditorium_query}` не найдена", get_search_keyboard())
+            else:
+                send_keyboard(vk, peer_id, "❓ Введите номер аудитории", get_search_keyboard())
+            return
+    
     # ===== ПРОВЕРКА НА ПРОСТОЙ НОМЕР АУДИТОРИИ =====
     aud_pattern = re.match(r'^(\d{2,5}[а-я]?)$', text_lower)
     if aud_pattern:
@@ -1184,7 +1134,6 @@ elif state.get("mode") == "waiting_for_auditorium":
         results = search_auditoriums_by_name(aud_number)
         if len(results) == 1:
             aud = results[0]
-            print(f"🔍 Найдена аудитория: {aud['name']} (ID: {aud['id']})")  # Отладка
             set_user_selection(user_id, "auditorium", aud["name"], aud["id"])
             answer = get_schedule_for_auditorium_today(aud["id"], aud["name"])
             send_keyboard(vk, peer_id, answer, get_main_keyboard(bool(get_user_group(user_id))))
@@ -1332,7 +1281,8 @@ elif state.get("mode") == "waiting_for_auditorium":
             "✨ *Что умеет бот:*\n\n"
             "**По группам:**\n• 📅 РАСПИСАНИЕ - сегодня\n• 📆 НЕДЕЛЯ - текущая неделя\n"
             "• ⏩ СЛЕДУЮЩАЯ НЕДЕЛЯ\n• 🎯 БЛИЖАЙШЕЕ - следующее занятие\n\n"
-            "**По преподавателям:**\n• 👨‍🏫 ПРЕПОДАВАТЕЛИ - список\n• Напишите фамилию для выбора\n\n"
+            "**По преподавателям:**\n• 👨‍🏫 ПРЕПОДАВАТЕЛИ - список\n• Напишите фамилию для выбора\n"
+            "• В расписании преподавателя показываются группы\n\n"
             "**По аудиториям:**\n• 🏢 АУДИТОРИИ - список\n• Напишите номер для выбора (можно просто цифрами)\n\n"
             "**Поиск по дате:**\n• `расписание на 21.05` - на конкретный день\n• `неделя на 21.05` - на неделю\n\n"
             "**Управление:**\n• 📚 ВЫБРАТЬ ГРУППУ - задать группу\n• 🗑️ СБРОСИТЬ ВЫБОР - вернуться к группе\n"
@@ -1431,7 +1381,8 @@ elif state.get("mode") == "waiting_for_auditorium":
             f"{group_text}{selection_text}\n\n"
             "✨ *Как пользоваться:*\n\n"
             "**Выбор группы:**\n• `выбрать иктс тб31` - сохранить группу\n• `группы` - список всех групп\n• `найди иктс` - поиск группы\n\n"
-            "**Преподаватели:**\n• `преподаватель Иванов` - выбрать преподавателя\n\n"
+            "**Преподаватели:**\n• `преподаватель Иванов` - выбрать преподавателя\n"
+            "• В расписании преподавателя показываются группы\n\n"
             "**Аудитории:**\n• `аудитория 2349` - выбрать аудиторию\n• `1301` - быстрый поиск\n\n"
             "**Поиск по дате:**\n• `расписание на 21.05` - на конкретный день\n"
             "• `неделя на 21.05` - на неделю\n\n"
