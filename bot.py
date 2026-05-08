@@ -385,15 +385,22 @@ def fetch_schedule_by_auditorium(auditorium_id, date=None):
     if date is None:
         date = datetime.now().strftime("%Y-%m-%d")
     try:
-        response = requests.get(API_BASE_URL, params={
-                                "idAud": auditorium_id, "sdate": date}, timeout=15)
+        # Убедимся, что ID - число
+        aud_id = int(auditorium_id)
+        response = requests.get(API_BASE_URL, params={"idAud": aud_id, "sdate": date}, timeout=15)
         response.raise_for_status()
         data = response.json()
+        
+        # Проверяем ответ API
         if data.get("state") != 1:
-            return None, f"Ошибка: {data.get('msg')}"
+            return None, f"Ошибка API: {data.get('msg', 'Неизвестная ошибка')}"
+        
         all_lessons = data.get("data", {}).get("rasp", [])
+        # Фильтруем только занятия за запрошенную дату
         filtered = [l for l in all_lessons if l.get("дата", "")[:10] == date]
         return filtered, None
+    except ValueError:
+        return None, f"Ошибка: неверный ID аудитории {auditorium_id}"
     except Exception as e:
         return None, f"Ошибка: {e}"
 
@@ -1142,13 +1149,14 @@ elif state.get("mode") == "waiting_for_auditorium":
 
     return
 
-    # ===== ПРОВЕРКА НА ПРОСТОЙ НОМЕР АУДИТОРИИ (ВНЕ СОСТОЯНИЙ!) =====
+    # ===== ПРОВЕРКА НА ПРОСТОЙ НОМЕР АУДИТОРИИ =====
     aud_pattern = re.match(r'^(\d{2,5}[а-я]?)$', text_lower)
     if aud_pattern:
         aud_number = aud_pattern.group(1)
         results = search_auditoriums_by_name(aud_number)
         if len(results) == 1:
             aud = results[0]
+            print(f"🔍 Найдена аудитория: {aud['name']} (ID: {aud['id']})")  # Отладка
             set_user_selection(user_id, "auditorium", aud["name"], aud["id"])
             answer = get_schedule_for_auditorium_today(aud["id"], aud["name"])
             send_keyboard(vk, peer_id, answer, get_main_keyboard(bool(get_user_group(user_id))))
