@@ -1,2 +1,3 @@
 vk-api==11.10.0
 requests==2.33.1
+urllib3
